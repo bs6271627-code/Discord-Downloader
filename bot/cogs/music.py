@@ -68,7 +68,9 @@ class Music(commands.Cog):
     async def on_wavelink_inactive_player(
         self, player: wavelink.Player
     ) -> None:
-        """Disconnect after 3 minutes of silence to save resources."""
+        """Disconnect after 3 minutes of silence, unless 24/7 mode is on."""
+        if getattr(player, "twentyfour_seven", False):
+            return
         await player.disconnect()
 
     # ------------------------------------------------------------------ #

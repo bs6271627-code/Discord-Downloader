@@ -230,6 +230,53 @@ class Utility(commands.Cog):
         embed.set_image(url=fetched.banner.url)
         await ctx.send(embed=embed)
 
+    # ------------------------------------------------------------------ #
+    #  userinfo
+    # ------------------------------------------------------------------ #
+
+    @commands.hybrid_command(name="userinfo", description="Display information about a user.")
+    @app_commands.describe(user="The user to look up (defaults to you)")
+    async def userinfo(
+        self, ctx: commands.Context, user: discord.Member | None = None
+    ) -> None:
+        await ctx.defer()
+        target = user or ctx.author
+        if not isinstance(target, discord.Member):
+            await ctx.send("❌ This command must be used in a server.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title=f"👤 {target.display_name}",
+            color=target.color if target.color.value else ACCENT,
+        )
+        embed.set_thumbnail(url=target.display_avatar.url)
+        embed.add_field(name="Username", value=str(target), inline=True)
+        embed.add_field(name="ID", value=str(target.id), inline=True)
+        embed.add_field(name="Bot", value="Yes" if target.bot else "No", inline=True)
+        embed.add_field(
+            name="Account Created",
+            value=discord.utils.format_dt(target.created_at, style="D"),
+            inline=True,
+        )
+        embed.add_field(
+            name="Joined Server",
+            value=discord.utils.format_dt(target.joined_at, style="D") if target.joined_at else "Unknown",
+            inline=True,
+        )
+        roles = [r.mention for r in reversed(target.roles) if r.name != "@everyone"]
+        embed.add_field(
+            name=f"Roles ({len(roles)})",
+            value=" ".join(roles[:10]) + ("…" if len(roles) > 10 else "") if roles else "None",
+            inline=False,
+        )
+        if target.premium_since:
+            embed.add_field(
+                name="Boosting Since",
+                value=discord.utils.format_dt(target.premium_since, style="D"),
+                inline=True,
+            )
+        await ctx.send(embed=embed)
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Utility(bot))
