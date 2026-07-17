@@ -8,47 +8,84 @@ ACCENT = 0xC193CC  # #c193cc
 # Each tuple: (category header, commands text)
 CATEGORIES: list[tuple[str, str]] = [
     (
-        "✰ Playback",
+        "ꪆ Playback ৻",
         "`join` — Join your voice channel\n"
         "`leave` — Disconnect and clear the queue\n"
         "`play <query>` — Play a track or playlist\n"
         "`pause` — Pause the current track\n"
         "`resume` — Resume playback\n"
         "`skip` — Skip the current track\n"
-        "`stop` — Stop playback and clear the queue",
-    ),
-    (
-        "✰ Queue",
-        "`queue` — View the current queue\n"
+        "`stop` — Stop playback and clear the queue\n"
         "`nowplaying` — Show what's currently playing",
     ),
     (
-        "✰ Audio",
-        "*Coming soon…*",
+        "ꪆ Queue ৻",
+        "`queue` — View the current queue\n"
+        "`remove <pos>` — Remove a track from the queue\n"
+        "`clearqueue` — Clear the entire queue\n"
+        "`shuffle` — Shuffle the queue\n"
+        "`loop` — Toggle loop mode",
     ),
     (
-        "✰ Premium",
-        "*Coming soon…*",
+        "ꪆ Audio ৻",
+        "`volume <0-200>` — Set the playback volume\n"
+        "`bassboost` — Toggle bass boost\n"
+        "`nightcore` — Toggle nightcore filter\n"
+        "`filter <name>` — Apply an audio filter",
     ),
     (
-        "✰ User Lookup",
-        "*Coming soon…*",
+        "ꪆ Premium ৻",
+        "`247` — Enable 24/7 mode (stay in VC)\n"
+        "`autoplay` — Toggle autoplay related tracks\n"
+        "`lyrics` — Fetch lyrics for the current track\n"
+        "`history` — View recently played tracks\n"
+        "`playlist` — Manage your saved playlists",
     ),
     (
-        "✰ Couples",
-        "*Coming soon…*",
+        "ꪆ User Lookup ৻",
+        "`avatar <user>` — Show a user's avatar\n"
+        "`banner <user>` — Show a user's banner\n"
+        "`userinfo <user>` — Display user information\n"
+        "`nick <name>` — Change your nickname\n"
+        "`afk <reason>` — Set your AFK status",
     ),
     (
-        "✰ Games",
-        "*Coming soon…*",
+        "ꪆ Couples ৻",
+        "`ship <user>` — Check compatibility with someone\n"
+        "`marry <user>` — Propose to someone\n"
+        "`divorce <user>` — End a marriage\n"
+        "`kiss <user>` — Kiss someone\n"
+        "`cuddle <user>` — Cuddle someone\n"
+        "`pat <user>` — Pat someone\n"
+        "`wink <user>` — Wink at someone\n"
+        "`highfive <user>` — High five someone",
     ),
     (
-        "✰ Fun",
-        "*Coming soon…*",
+        "ꪆ Games ৻",
+        "`rps <choice>` — Rock, paper, scissors\n"
+        "`coinflip` — Flip a coin\n"
+        "`dice` — Roll a dice\n"
+        "`tictactoe <user>` — Play tic-tac-toe",
     ),
     (
-        "✰ Utility",
-        "`help` — Show this help menu",
+        "ꪆ Fun ৻",
+        "`8ball <question>` — Ask the magic 8-ball\n"
+        "`rate <thing>` — Rate anything out of 10\n"
+        "`meme` — Fetch a random meme\n"
+        "`fact` — Get a random fun fact",
+    ),
+    (
+        "ꪆ Utility ৻",
+        "`help` — Show this help menu\n"
+        "`ping` — Check the bot's latency\n"
+        "`botinfo` — Display bot information\n"
+        "`stats` — View bot statistics\n"
+        "`serverinfo` — Display server information\n"
+        "`poll <question>` — Create a poll\n"
+        "`nick <name>` — Change your nickname\n"
+        "`afk <reason>` — Set your AFK status\n"
+        "`avatar <user>` — Show a user's avatar\n"
+        "`banner <user>` — Show a user's banner",
     ),
 ]
 
