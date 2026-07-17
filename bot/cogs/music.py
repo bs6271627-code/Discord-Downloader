@@ -49,6 +49,17 @@ class Music(commands.Cog):
         pass
 
     @commands.Cog.listener()
+    async def on_wavelink_track_exception(
+        self, payload: wavelink.TrackExceptionEventPayload
+    ) -> None:
+        player: wavelink.Player = payload.player
+        channel: discord.TextChannel | None = getattr(player, "home", None)
+        if channel:
+            await channel.send(
+                f"⚠️ Playback error for **{payload.track.title}**: {payload.exception.get('message', 'unknown error')}",
+            )
+
+    @commands.Cog.listener()
     async def on_wavelink_inactive_player(
         self, player: wavelink.Player
     ) -> None:
@@ -153,7 +164,11 @@ class Music(commands.Cog):
         # Keep home channel up to date.
         player.home = interaction.channel  # type: ignore[attr-defined]
 
-        tracks: wavelink.Search = await wavelink.Playable.search(query)
+        # Use SoundCloud search — YouTube search returns empty from datacenter IPs.
+        # YouTube/SoundCloud direct URLs are detected automatically and bypass this prefix.
+        tracks: wavelink.Search = await wavelink.Playable.search(
+            query, source=wavelink.TrackSource.SoundCloud
+        )
 
         if not tracks:
             await interaction.followup.send("❌ No results found.", ephemeral=True)
