@@ -2,7 +2,8 @@ import asyncio
 import discord
 import yt_dlp
 
-# Suppress yt-dlp noise
+# Suppress yt-dlp noise — must accept *args/**kwargs; newer yt-dlp calls
+# bug_reports_message(before='\n') which breaks a plain `lambda: ""`.
 def _no_bug_report(*args, **kwargs) -> str:
     return ""
 
@@ -39,38 +40,42 @@ class YTDLSource:
         self.uploader: str = data.get("uploader", "Unknown")
 
     @classmethod
-    async def from_query(
-        cls, query: str, *, loop: asyncio.AbstractEventLoop | None = None
-    ) -> "YTDLSource":
+    async def from_query(cls, query: str) -> "YTDLSource":
         """
         Resolve a YouTube URL or search query and return a YTDLSource.
         The blocking yt-dlp call runs in a thread-pool executor.
+        Uses asyncio.get_running_loop() — correct for Python 3.10+ inside
+        a running event loop (get_event_loop() is deprecated there).
         """
-        loop = loop or asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         if not query.startswith(("http://", "https://")):
             query = f"ytsearch:{query}"
 
-        # Use a proper function (not functools.partial / lambda) so that
-        # yt-dlp can call its internal hooks with arbitrary *args/**kwargs
-        # without raising "unexpected keyword argument" errors.
+        print(f"[ytdl] extraction start  query={query!r}", flush=True)
+
         def _extract() -> dict:
+            print("[ytdl] _extract running in executor thread", flush=True)
             with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ydl:
                 info = ydl.extract_info(query, download=False)
+                print(f"[ytdl] extract_info returned: {type(info)}", flush=True)
                 if info is None:
                     raise ValueError("yt-dlp returned no data for that query.")
-                # ytsearch wraps results in an "entries" list
                 if "entries" in info:
                     entries = [e for e in info["entries"] if e]
                     if not entries:
                         raise ValueError("No results found for that query.")
                     info = entries[0]
+                    print(f"[ytdl] picked first search entry: {info.get('title')!r}", flush=True)
                 return ydl.sanitize_info(info)
 
         data = await loop.run_in_executor(None, _extract)
+        print(f"[ytdl] extraction done  title={data.get('title')!r}", flush=True)
 
         stream_url: str = data["url"]
+        print(f"[ytdl] creating FFmpegPCMAudio  url={stream_url[:60]}...", flush=True)
         audio_source = discord.FFmpegPCMAudio(stream_url, **FFMPEG_OPTIONS)
+        print("[ytdl] FFmpegPCMAudio created OK", flush=True)
         return cls(audio_source, data=data)
 
     def formatted_duration(self) -> str:

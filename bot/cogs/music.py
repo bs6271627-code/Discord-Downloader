@@ -162,19 +162,26 @@ class Music(commands.Cog):
             return
 
         # Nothing playing — resolve and start immediately
+        print(f"[play] entering play command  query={query!r}", flush=True)
         await interaction.followup.send(f"🔍 Searching for `{query}`…")
         try:
-            source = await YTDLSource.from_query(query, loop=self.bot.loop)
+            print("[play] calling YTDLSource.from_query …", flush=True)
+            source = await YTDLSource.from_query(query)
+            print(f"[play] from_query returned  title={source.title!r}", flush=True)
         except Exception as exc:
+            import traceback
+            print(f"[play] from_query raised:\n{traceback.format_exc()}", flush=True)
             await interaction.followup.send(f"❌ Could not load track: {exc}")
             return
 
         state.current = source
 
+        print("[play] calling vc.play …", flush=True)
         vc.play(
             discord.PCMVolumeTransformer(source.source, volume=0.5),
             after=lambda _: self._play_next(interaction, state),
         )
+        print("[play] vc.play returned", flush=True)
 
         embed = discord.Embed(
             title="🎵 Now Playing",
