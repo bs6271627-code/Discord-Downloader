@@ -3,7 +3,10 @@ import discord
 import yt_dlp
 
 # Suppress yt-dlp noise
-yt_dlp.utils.bug_reports_message = lambda: ""
+def _no_bug_report(*args, **kwargs) -> str:
+    return ""
+
+yt_dlp.utils.bug_reports_message = _no_bug_report
 
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
