@@ -10,7 +10,7 @@ lavalink:
   server:
     password: "youshallnotpass"
     sources:
-      youtube: false       # Handled by youtube-plugin above.
+      youtube: false       # Handled by youtube-plugin below.
       bandcamp: true
       soundcloud: true
       twitch: true
@@ -46,10 +46,11 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
+    # ANDROID_MUSIC and IOS use mobile app endpoints that bypass
+    # YouTube's datacenter-IP "requires login" blocks on WEB/WEB_REMIX.
     clients:
-      - MUSIC
-      - WEB
-      - WEB_REMIX
+      - ANDROID_MUSIC
+      - IOS
 
 metrics:
   prometheus:
