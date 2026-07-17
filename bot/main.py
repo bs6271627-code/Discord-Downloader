@@ -26,6 +26,7 @@ class MusicBot(commands.Bot):
     async def setup_hook(self) -> None:
         await self.load_extension("cogs.music")
         await self.load_extension("cogs.help")
+        await self.load_extension("cogs.utility")
         await self.tree.sync()
         print("Slash commands synced.", flush=True)
 

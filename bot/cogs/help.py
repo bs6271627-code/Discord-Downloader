@@ -81,11 +81,7 @@ CATEGORIES: list[tuple[str, str]] = [
         "`botinfo` — Display bot information\n"
         "`stats` — View bot statistics\n"
         "`serverinfo` — Display server information\n"
-        "`poll <question>` — Create a poll\n"
-        "`nick <name>` — Change your nickname\n"
-        "`afk <reason>` — Set your AFK status\n"
-        "`avatar <user>` — Show a user's avatar\n"
-        "`banner <user>` — Show a user's banner",
+        "`poll <question>` — Create a poll",
     ),
 ]
 
