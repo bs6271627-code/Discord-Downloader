@@ -27,6 +27,9 @@ class MusicBot(commands.Bot):
         await self.load_extension("cogs.music")
         await self.load_extension("cogs.help")
         await self.load_extension("cogs.utility")
+        await self.load_extension("cogs.couples")
+        await self.load_extension("cogs.games")
+        await self.load_extension("cogs.fun")
         await self.tree.sync()
         print("Slash commands synced.", flush=True)
 
