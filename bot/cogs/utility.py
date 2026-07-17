@@ -163,10 +163,16 @@ class Utility(commands.Cog):
         if message.author.bot or message.guild is None:
             return
 
+        # Resolve the command for this message so we can ignore the ?afk
+        # invocation itself — otherwise the listener would remove the status
+        # that the command just set, in the same message event.
+        ctx = await self.bot.get_context(message)
+        is_afk_command = ctx.command is not None and ctx.command.name == "afk"
+
         guild_store = _afk.get(message.guild.id, {})
 
-        # Clear AFK if the AFK user speaks again.
-        if message.author.id in guild_store:
+        # Clear AFK only on the user's NEXT normal message, not the ?afk command itself.
+        if not is_afk_command and message.author.id in guild_store:
             guild_store.pop(message.author.id)
             await message.channel.send(
                 f"👋 Welcome back, {message.author.mention}! AFK status removed.",
