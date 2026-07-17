@@ -19,11 +19,13 @@ class MusicBot(commands.Bot):
         intents.message_content = True
         super().__init__(
             command_prefix=commands.when_mentioned_or("?"),
+            help_command=None,  # disable default HelpCommand; custom one in cogs/help.py
             intents=intents,
         )
 
     async def setup_hook(self) -> None:
         await self.load_extension("cogs.music")
+        await self.load_extension("cogs.help")
         await self.tree.sync()
         print("Slash commands synced.", flush=True)
 
