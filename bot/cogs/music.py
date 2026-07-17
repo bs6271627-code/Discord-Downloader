@@ -7,7 +7,12 @@ from discord.ext import commands
 
 
 class Music(commands.Cog):
-    """All music slash commands, powered by Wavelink + Lavalink."""
+    """All music commands, powered by Wavelink + Lavalink.
+
+    Each command is a hybrid_command, so it registers as a slash command
+    (/play), a prefix command (?play), and a mention command (@Bot play)
+    from a single implementation — no logic is duplicated.
+    """
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -45,7 +50,6 @@ class Music(commands.Cog):
         self, payload: wavelink.TrackEndEventPayload
     ) -> None:
         # AutoPlayMode.partial handles queue advancement automatically.
-        # Nothing to do here unless we want extra behaviour.
         pass
 
     @commands.Cog.listener()
@@ -56,7 +60,8 @@ class Music(commands.Cog):
         channel: discord.TextChannel | None = getattr(player, "home", None)
         if channel:
             await channel.send(
-                f"⚠️ Playback error for **{payload.track.title}**: {payload.exception.get('message', 'unknown error')}",
+                f"⚠️ Playback error for **{payload.track.title}**: "
+                f"{payload.exception.get('message', 'unknown error')}",
             )
 
     @commands.Cog.listener()
@@ -72,106 +77,99 @@ class Music(commands.Cog):
 
     async def _get_player(
         self,
-        interaction: discord.Interaction,
+        ctx: commands.Context,
         *,
         join: bool = False,
     ) -> wavelink.Player | None:
         """
         Return the guild's Player.
         If *join* is True and the user is in a voice channel, create one.
-        Sends an ephemeral error and returns None on failure.
+        Sends an error and returns None on failure.
         """
-        player: wavelink.Player | None = interaction.guild.voice_client  # type: ignore[assignment]
+        player: wavelink.Player | None = ctx.guild.voice_client  # type: ignore[assignment]
 
         if player is None:
             if not join:
-                await interaction.followup.send(
-                    "❌ I'm not in a voice channel. Use `/join` first.",
+                await ctx.send(
+                    "❌ I'm not in a voice channel. Use `join` first.",
                     ephemeral=True,
                 )
                 return None
 
-            if interaction.user.voice is None:  # type: ignore[union-attr]
-                await interaction.followup.send(
+            if ctx.author.voice is None:  # type: ignore[union-attr]
+                await ctx.send(
                     "❌ You must be in a voice channel first.", ephemeral=True
                 )
                 return None
 
-            player = await interaction.user.voice.channel.connect(cls=wavelink.Player)  # type: ignore[union-attr]
-            player.home = interaction.channel  # type: ignore[attr-defined]
+            player = await ctx.author.voice.channel.connect(cls=wavelink.Player)  # type: ignore[union-attr]
+            player.home = ctx.channel  # type: ignore[attr-defined]
             player.autoplay = wavelink.AutoPlayMode.partial
 
         return player
 
     # ------------------------------------------------------------------ #
-    #  Slash commands
+    #  Commands  (hybrid = slash /cmd + prefix ?cmd + mention @Bot cmd)
     # ------------------------------------------------------------------ #
 
-    @app_commands.command(name="join", description="Join your current voice channel.")
-    async def join(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
+    @commands.hybrid_command(name="join", description="Join your current voice channel.")
+    async def join(self, ctx: commands.Context) -> None:
+        await ctx.defer(ephemeral=True)
 
-        if interaction.user.voice is None:  # type: ignore[union-attr]
-            await interaction.followup.send(
-                "❌ You must be in a voice channel first.", ephemeral=True
-            )
+        if ctx.author.voice is None:  # type: ignore[union-attr]
+            await ctx.send("❌ You must be in a voice channel first.", ephemeral=True)
             return
 
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
-        player: wavelink.Player | None = interaction.guild.voice_client  # type: ignore[assignment]
+        channel = ctx.author.voice.channel  # type: ignore[union-attr]
+        player: wavelink.Player | None = ctx.guild.voice_client  # type: ignore[assignment]
 
         if player is not None:
             await player.move_to(channel)  # type: ignore[arg-type]
-            await interaction.followup.send(
-                f"✅ Moved to **{channel.name}**.", ephemeral=True
-            )
+            await ctx.send(f"✅ Moved to **{channel.name}**.", ephemeral=True)
             return
 
         player = await channel.connect(cls=wavelink.Player)
-        player.home = interaction.channel  # type: ignore[attr-defined]
+        player.home = ctx.channel  # type: ignore[attr-defined]
         player.autoplay = wavelink.AutoPlayMode.partial
-        await interaction.followup.send(
-            f"✅ Joined **{channel.name}**.", ephemeral=True
-        )
+        await ctx.send(f"✅ Joined **{channel.name}**.", ephemeral=True)
 
-    @app_commands.command(
+    @commands.hybrid_command(
         name="leave", description="Leave the voice channel and clear the queue."
     )
-    async def leave(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+    async def leave(self, ctx: commands.Context) -> None:
+        await ctx.defer()
 
-        player: wavelink.Player | None = interaction.guild.voice_client  # type: ignore[assignment]
+        player: wavelink.Player | None = ctx.guild.voice_client  # type: ignore[assignment]
         if player is None:
-            await interaction.followup.send(
-                "❌ I'm not in a voice channel.", ephemeral=True
-            )
+            await ctx.send("❌ I'm not in a voice channel.", ephemeral=True)
             return
 
         await player.disconnect()
-        await interaction.followup.send("👋 Disconnected and cleared the queue.")
+        await ctx.send("👋 Disconnected and cleared the queue.")
 
-    @app_commands.command(
-        name="play", description="Play a track from YouTube (URL or search query)."
+    @commands.hybrid_command(
+        name="play", description="Play a track from SoundCloud (URL or search query)."
     )
-    @app_commands.describe(query="YouTube URL or search terms")
-    async def play(self, interaction: discord.Interaction, query: str) -> None:
-        await interaction.response.defer()
+    @app_commands.describe(query="SoundCloud URL or search terms")
+    async def play(self, ctx: commands.Context, *, query: str) -> None:
+        await ctx.defer()
 
-        player = await self._get_player(interaction, join=True)
+        player = await self._get_player(ctx, join=True)
         if player is None:
             return
 
         # Keep home channel up to date.
-        player.home = interaction.channel  # type: ignore[attr-defined]
+        player.home = ctx.channel  # type: ignore[attr-defined]
 
-        # Use SoundCloud search — YouTube search returns empty from datacenter IPs.
-        # YouTube/SoundCloud direct URLs are detected automatically and bypass this prefix.
+        # SoundCloud search works from datacenter IPs; YouTube search returns
+        # empty. YouTube/SoundCloud direct URLs are auto-detected and bypass
+        # the search prefix.
         tracks: wavelink.Search = await wavelink.Playable.search(
             query, source=wavelink.TrackSource.SoundCloud
         )
 
         if not tracks:
-            await interaction.followup.send("❌ No results found.", ephemeral=True)
+            await ctx.send("❌ No results found.", ephemeral=True)
             return
 
         if isinstance(tracks, wavelink.Playlist):
@@ -192,88 +190,79 @@ class Music(commands.Cog):
             else:
                 msg = f"🎵 Loading **{track.title}**…"
 
-        # Start playback if nothing is currently playing.
         if not player.playing:
             await player.play(player.queue.get(), populate=False)
 
-        await interaction.followup.send(msg)
+        await ctx.send(msg)
 
-    @app_commands.command(name="pause", description="Pause the current track.")
-    async def pause(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+    @commands.hybrid_command(name="pause", description="Pause the current track.")
+    async def pause(self, ctx: commands.Context) -> None:
+        await ctx.defer()
 
-        player = await self._get_player(interaction)
+        player = await self._get_player(ctx)
         if player is None:
             return
 
         if not player.playing:
-            await interaction.followup.send(
-                "⚠️ Nothing is playing.", ephemeral=True
-            )
+            await ctx.send("⚠️ Nothing is playing.", ephemeral=True)
             return
 
         if player.paused:
-            await interaction.followup.send(
-                "⚠️ Already paused.", ephemeral=True
-            )
+            await ctx.send("⚠️ Already paused.", ephemeral=True)
             return
 
         await player.pause(True)
-        await interaction.followup.send("⏸ Paused.")
+        await ctx.send("⏸ Paused.")
 
-    @app_commands.command(name="resume", description="Resume the paused track.")
-    async def resume(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+    @commands.hybrid_command(name="resume", description="Resume the paused track.")
+    async def resume(self, ctx: commands.Context) -> None:
+        await ctx.defer()
 
-        player = await self._get_player(interaction)
+        player = await self._get_player(ctx)
         if player is None:
             return
 
         if not player.paused:
-            await interaction.followup.send(
-                "⚠️ Not currently paused.", ephemeral=True
-            )
+            await ctx.send("⚠️ Not currently paused.", ephemeral=True)
             return
 
         await player.pause(False)
-        await interaction.followup.send("▶️ Resumed.")
+        await ctx.send("▶️ Resumed.")
 
-    @app_commands.command(name="skip", description="Skip the current track.")
-    async def skip(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+    @commands.hybrid_command(name="skip", description="Skip the current track.")
+    async def skip(self, ctx: commands.Context) -> None:
+        await ctx.defer()
 
-        player = await self._get_player(interaction)
+        player = await self._get_player(ctx)
         if player is None:
             return
 
         if not player.playing and not player.paused:
-            await interaction.followup.send(
-                "⚠️ Nothing is playing.", ephemeral=True
-            )
+            await ctx.send("⚠️ Nothing is playing.", ephemeral=True)
             return
 
         await player.skip(force=True)
-        await interaction.followup.send("⏭ Skipped.")
+        await ctx.send("⏭ Skipped.")
 
-    @app_commands.command(
+    @commands.hybrid_command(
         name="stop", description="Stop playback and clear the queue."
     )
-    async def stop(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+    async def stop(self, ctx: commands.Context) -> None:
+        await ctx.defer()
 
-        player = await self._get_player(interaction)
+        player = await self._get_player(ctx)
         if player is None:
             return
 
         player.queue.clear()
         await player.stop()
-        await interaction.followup.send("⏹ Stopped and cleared the queue.")
+        await ctx.send("⏹ Stopped and cleared the queue.")
 
-    @app_commands.command(name="queue", description="View the current queue.")
-    async def queue_cmd(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+    @commands.hybrid_command(name="queue", description="View the current queue.")
+    async def queue_cmd(self, ctx: commands.Context) -> None:
+        await ctx.defer()
 
-        player: wavelink.Player | None = interaction.guild.voice_client  # type: ignore[assignment]
+        player: wavelink.Player | None = ctx.guild.voice_client  # type: ignore[assignment]
 
         embed = discord.Embed(title="📋 Queue", color=discord.Color.blurple())
 
@@ -289,7 +278,9 @@ class Music(commands.Cog):
             lines = [
                 f"`{i + 1}.` {t.title}" for i, t in enumerate(queue_list[:20])
             ]
-            suffix = f"\n…and {len(queue_list) - 20} more" if len(queue_list) > 20 else ""
+            suffix = (
+                f"\n…and {len(queue_list) - 20} more" if len(queue_list) > 20 else ""
+            )
             embed.add_field(
                 name=f"Up Next ({len(queue_list)} track{'s' if len(queue_list) != 1 else ''})",
                 value="\n".join(lines) + suffix,
@@ -298,23 +289,21 @@ class Music(commands.Cog):
         else:
             embed.add_field(name="Up Next", value="Queue is empty.", inline=False)
 
-        await interaction.followup.send(embed=embed)
+        await ctx.send(embed=embed)
 
-    @app_commands.command(
+    @commands.hybrid_command(
         name="nowplaying", description="Show what's currently playing."
     )
-    async def nowplaying(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+    async def nowplaying(self, ctx: commands.Context) -> None:
+        await ctx.defer()
 
-        player: wavelink.Player | None = interaction.guild.voice_client  # type: ignore[assignment]
+        player: wavelink.Player | None = ctx.guild.voice_client  # type: ignore[assignment]
 
         if not player or not player.current:
-            await interaction.followup.send(
-                "⚠️ Nothing is currently playing.", ephemeral=True
-            )
+            await ctx.send("⚠️ Nothing is currently playing.", ephemeral=True)
             return
 
-        await interaction.followup.send(embed=_now_playing_embed(player.current))
+        await ctx.send(embed=_now_playing_embed(player.current))
 
 
 # ------------------------------------------------------------------ #

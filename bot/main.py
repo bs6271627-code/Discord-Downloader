@@ -16,7 +16,10 @@ LAVALINK_PASSWORD = "youshallnotpass"
 class MusicBot(commands.Bot):
     def __init__(self) -> None:
         intents = discord.Intents.default()
-        super().__init__(command_prefix="!", intents=intents)
+        super().__init__(
+            command_prefix=commands.when_mentioned_or("?"),
+            intents=intents,
+        )
 
     async def setup_hook(self) -> None:
         await self.load_extension("cogs.music")
