@@ -1,36 +1,34 @@
-# [Project name]
+# Discord Music Bot
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Discord bot that plays music in voice channels using slash commands (`/play`, etc.), powered by discord.py + Wavelink + a bundled Lavalink audio server.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+Two workflows must both be running:
+
+- **Lavalink** — `cd lavalink && java -jar Lavalink.jar` — Java audio server (port 2333)
+- **Discord Music Bot** — `uv run python bot/main.py` — Python bot that connects to Lavalink
+
+Start both via the **Project** run button (runs them in parallel).
+
+To install / sync Python dependencies: `uv sync` (creates `.pythonlibs/` venv from `pyproject.toml`).
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Python 3.12, discord.py 2.x, Wavelink 3.x, yt-dlp
+- Lavalink 4.x (Java 21) with youtube-plugin 1.18.1
+- Audio sources: YouTube, SoundCloud, Bandcamp, Twitch, Vimeo, HTTP streams
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `bot/main.py` — bot entrypoint, Lavalink connection logic
+- `bot/cogs/music.py` — all music slash commands
+- `lavalink/application.yml` — Lavalink server config (password, sources, plugins)
+- `pyproject.toml` — Python dependencies
 
-## Architecture decisions
+## Required secrets
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
+- `TOKEN` — Discord bot token (set as a Replit Secret)
 
 ## User preferences
 
@@ -38,8 +36,6 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Start **Lavalink first** — the bot retries connecting up to 12 times (5 s apart), so if Lavalink is slow to start the bot will wait and reconnect automatically.
+- Python deps must be installed via `uv sync`, not pip — NixOS's system Python is externally managed.
+- The Lavalink password (`youshallnotpass`) is hardcoded in both `bot/main.py` and `lavalink/application.yml` — change both if you rotate it.
