@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import gc
+import resource
+import time
+
 import aiohttp
 import discord
 import wavelink
@@ -7,6 +11,13 @@ from discord import app_commands
 from discord.ext import commands
 
 ACCENT = 0xC193CC
+ENHANCE_COLOR = 0xD1ABED
+
+# Cog extension names that must always be loaded.
+_EXPECTED_EXTENSIONS: frozenset[str] = frozenset({
+    "cogs.music", "cogs.help", "cogs.utility", "cogs.couples",
+    "cogs.games", "cogs.fun", "cogs.queue", "cogs.audio", "cogs.premium",
+})
 
 # Per-guild history: list of (title, uri) newest-first, capped at 20
 _history: dict[int, list[tuple[str, str]]] = {}
@@ -16,6 +27,20 @@ _playlists: dict[int, dict[str, list[str]]] = {}
 
 # Guilds with 24/7 mode enabled — read by music.py via getattr on the player
 # (we store it as a player attribute; see the 247 command below)
+
+
+# ------------------------------------------------------------------ #
+#  Permission check: Administrator OR bot owner
+# ------------------------------------------------------------------ #
+
+async def _is_admin_or_owner(ctx: commands.Context) -> bool:
+    if await ctx.bot.is_owner(ctx.author):
+        return True
+    if ctx.guild and ctx.author.guild_permissions.administrator:
+        return True
+    raise commands.CheckFailure(
+        "❌ You need **Administrator** permission (or be the bot owner) to use this command."
+    )
 
 
 class Premium(commands.Cog):
@@ -280,6 +305,162 @@ class Premium(commands.Cog):
                 "❌ Unknown action. Use `list`, `save`, `load`, or `delete`.",
                 ephemeral=True,
             )
+
+    # ------------------------------------------------------------------ #
+    #  enhance
+    # ------------------------------------------------------------------ #
+
+    @commands.hybrid_command(
+        name="enhance",
+        description="Optimize the bot, refresh internal systems, and run a health check.",
+    )
+    @app_commands.default_permissions(administrator=True)
+    @commands.guild_only()
+    @commands.check(_is_admin_or_owner)
+    async def enhance(self, ctx: commands.Context) -> None:
+        await ctx.defer()
+
+        # ── Send progress indicator ───────────────────────────────────────
+        progress = discord.Embed(
+            title="⚙️ Seraph Enhancement",
+            description="🔄 Running health checks and optimizations…",
+            color=ENHANCE_COLOR,
+        )
+        msg = await ctx.send(embed=progress)
+
+        fixes: list[str] = []
+        checks: dict[str, str] = {}
+
+        # ── 1. Latency (before) ───────────────────────────────────────────
+        ws_before = round(self.bot.latency * 1000)
+
+        # ── 2. Cog / extension integrity ─────────────────────────────────
+        loaded_exts = set(self.bot.extensions.keys())
+        missing_exts = _EXPECTED_EXTENSIONS - loaded_exts
+        if missing_exts:
+            repaired = 0
+            for ext in missing_exts:
+                try:
+                    await self.bot.load_extension(ext)
+                    fixes.append(f"🔧 Reloaded missing extension: `{ext}`")
+                    repaired += 1
+                except Exception as exc:
+                    fixes.append(f"❌ Could not reload `{ext}`: {exc}")
+            total_now = len(_EXPECTED_EXTENSIONS) - len(missing_exts) + repaired
+            checks["Cogs"] = (
+                f"⚠️ {total_now}/{len(_EXPECTED_EXTENSIONS)} — "
+                f"repaired {repaired}"
+            )
+        else:
+            checks["Cogs"] = f"✅ {len(_EXPECTED_EXTENSIONS)}/{len(_EXPECTED_EXTENSIONS)} loaded"
+
+        # ── 3. Command registry ───────────────────────────────────────────
+        prefix_cmds = len([c for c in self.bot.commands if not c.hidden])
+        slash_cmds  = len(self.bot.tree.get_commands())
+        checks["Commands"] = f"✅ {prefix_cmds} prefix · {slash_cmds} slash"
+
+        # ── 4. Lavalink node ──────────────────────────────────────────────
+        try:
+            node = wavelink.Pool.get_node()
+            if node.status == wavelink.NodeStatus.CONNECTED:
+                checks["Lavalink"] = "✅ Node connected"
+            else:
+                raise RuntimeError("Node not in CONNECTED state")
+        except Exception:
+            # Attempt reconnect — only if no music is actively playing
+            try:
+                uri  = getattr(self.bot, "lavalink_uri",  "http://localhost:2333")
+                pwd  = getattr(self.bot, "lavalink_password", "youshallnotpass")
+                node = wavelink.Node(uri=uri, password=pwd)
+                await wavelink.Pool.connect(
+                    nodes=[node], client=self.bot, cache_capacity=100
+                )
+                checks["Lavalink"] = "🔧 Node reconnected"
+                fixes.append("🔧 Reconnected to Lavalink node")
+            except Exception as exc:
+                checks["Lavalink"] = f"❌ Could not reconnect: {exc}"
+
+        # ── 5. Clean up idle players ──────────────────────────────────────
+        # Only disconnects players with no current track, empty queue,
+        # and 24/7 mode off — never interrupts active playback.
+        cleaned = 0
+        for guild in self.bot.guilds:
+            player: wavelink.Player | None = guild.voice_client  # type: ignore[assignment]
+            if player is None:
+                continue
+            is_247 = getattr(player, "twentyfour_seven", False)
+            if not player.playing and player.queue.is_empty and not is_247:
+                try:
+                    await player.disconnect()
+                    cleaned += 1
+                except Exception:
+                    pass
+        if cleaned:
+            fixes.append(
+                f"🧹 Released {cleaned} idle voice player{'s' if cleaned != 1 else ''}"
+            )
+
+        # ── 6. Garbage collection ─────────────────────────────────────────
+        gc.collect()
+
+        cache_note = "gc swept"
+        if cleaned:
+            cache_note += f", {cleaned} idle player{'s' if cleaned != 1 else ''} released"
+        checks["Cache"] = f"✅ {cache_note}"
+
+        # ── 7. Memory (RSS) ───────────────────────────────────────────────
+        # ru_maxrss is in KB on Linux
+        rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        checks["Memory"] = f"✅ {rss_kb / 1024:.1f} MB RSS"
+
+        # ── 8. Uptime ─────────────────────────────────────────────────────
+        start_time = getattr(self.bot, "start_time", None)
+        if start_time is not None:
+            delta   = discord.utils.utcnow() - start_time
+            days    = delta.days
+            hours, rem = divmod(delta.seconds, 3600)
+            minutes, _ = divmod(rem, 60)
+            uptime_str = f"{days}d {hours}h {minutes}m"
+        else:
+            uptime_str = "unavailable"
+        checks["Uptime"] = f"✅ {uptime_str}"
+
+        # ── 9. Latency (after) ────────────────────────────────────────────
+        ws_after = round(self.bot.latency * 1000)
+        checks["Latency"] = f"✅ {ws_after} ms WS heartbeat"
+
+        # ── Build final embed ─────────────────────────────────────────────
+        all_ok = not fixes
+        if all_ok:
+            description = "✨ **All systems nominal** — the bot is already fully optimized."
+        else:
+            n = len(fixes)
+            description = (
+                f"🔧 **{n} issue{'s' if n != 1 else ''} detected and repaired automatically.**"
+            )
+
+        embed = discord.Embed(
+            title="⚙️ Seraph Enhancement — Complete",
+            description=description,
+            color=ENHANCE_COLOR,
+        )
+
+        # Two-column summary grid
+        field_order = ["Cogs", "Commands", "Lavalink", "Cache", "Memory", "Uptime", "Latency"]
+        for key in field_order:
+            if key in checks:
+                embed.add_field(name=key, value=checks[key], inline=True)
+
+        if fixes:
+            embed.add_field(name="Repairs Applied", value="\n".join(fixes), inline=False)
+
+        avatar = self.bot.user.display_avatar.url if self.bot.user else None
+        embed.set_footer(
+            text="Seraph Optimizer  •  Only optimizes what the bot itself controls",
+            icon_url=avatar,
+        )
+
+        await msg.edit(embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:

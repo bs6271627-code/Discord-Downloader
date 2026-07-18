@@ -39,7 +39,8 @@ CATEGORIES: list[tuple[str, str]] = [
         "`autoplay` — Toggle autoplay related tracks\n"
         "`lyrics` — Fetch lyrics for the current track\n"
         "`history` — View recently played tracks\n"
-        "`playlist` — Manage your saved playlists",
+        "`playlist` — Manage your saved playlists\n"
+        "`enhance` — Optimize the bot, refresh internal systems, and run a health check",
     ),
     (
         "ꪆ User Lookup ৻",

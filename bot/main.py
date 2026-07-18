@@ -36,6 +36,10 @@ class MusicBot(commands.Bot):
         await self.tree.sync()
         print("Slash commands synced.", flush=True)
 
+        # Expose connection details for cogs that need them (e.g. enhance).
+        self.lavalink_uri: str = LAVALINK_URI
+        self.lavalink_password: str = LAVALINK_PASSWORD
+
         # Connect to Lavalink — retry until the node is up.
         node = wavelink.Node(uri=LAVALINK_URI, password=LAVALINK_PASSWORD)
         for attempt in range(1, 13):
@@ -51,6 +55,7 @@ class MusicBot(commands.Bot):
                     await asyncio.sleep(5)
 
     async def on_ready(self) -> None:
+        self.start_time: discord.utils.datetime_timedelta = discord.utils.utcnow()  # type: ignore[assignment]
         print(f"Logged in as {self.user} (ID: {self.user.id})", flush=True)
         await self.change_presence(
             activity=discord.Activity(
