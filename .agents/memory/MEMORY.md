@@ -1,0 +1,1 @@
+- [YouTube/Spotify on Replit](youtube-spotify-routing.md) — datacenter IPs are fully blocked by YouTube player; use oEmbed + SoundCloud resolver instead
