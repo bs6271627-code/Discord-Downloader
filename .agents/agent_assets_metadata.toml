@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "6UAKhwyn2kGDbTRwiTOEx"
+uri = "file://screenshots/ship_banner_preview.png"
+type = "image"
+title = "Ship Banner — Johan ❤ Seraphina (87%)"

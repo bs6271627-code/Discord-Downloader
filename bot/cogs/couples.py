@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import io
 import random
 import time
 
@@ -9,6 +10,14 @@ import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
+
+# Banner generator — imported lazily so a missing Pillow doesn't crash the cog
+try:
+    from utils.ship_banner import generate as _gen_banner
+    _BANNER_OK = True
+except Exception as _banner_import_err:
+    _BANNER_OK = False
+    print(f"[couples] ship_banner unavailable: {_banner_import_err}", flush=True)
 
 ACCENT = 0xC193CC
 
@@ -241,14 +250,38 @@ class Couples(commands.Cog):
             await ctx.send("❌ You can't ship someone with themselves!", ephemeral=True)
             return
 
-        pct      = _stable_percent(a.id, b.id)
-        half_a   = a.display_name[: max(1, len(a.display_name) // 2)]
-        half_b   = b.display_name[max(0, len(b.display_name) // 2) :]
+        pct       = _stable_percent(a.id, b.id)
+        half_a    = a.display_name[: max(1, len(a.display_name) // 2)]
+        half_b    = b.display_name[max(0, len(b.display_name) // 2) :]
         ship_name = half_a + half_b
 
-        session = await self._get_session()
-        gif     = await _fetch_gif(session, "ship")
+        # ── Generate premium banner ────────────────────────────────────
+        # Use a per-pair seed so the same two users always see a fresh
+        # random palette (seed changes each call via time component).
+        banner_file: discord.File | None = None
+        if _BANNER_OK:
+            try:
+                loop     = asyncio.get_running_loop()
+                # Run CPU-bound Pillow work in a thread so the event loop
+                # stays responsive.
+                seed     = random.randint(0, 2**31)
+                png_bytes = await loop.run_in_executor(
+                    None,
+                    lambda: _gen_banner(
+                        name1=a.display_name,
+                        name2=b.display_name,
+                        pct=pct,
+                        seed=seed,
+                    ),
+                )
+                banner_file = discord.File(
+                    io.BytesIO(png_bytes), filename="ship_banner.png"
+                )
+            except Exception as exc:
+                print(f"[ship] banner generation failed: {exc}", flush=True)
+                banner_file = None
 
+        # ── Build embed ────────────────────────────────────────────────
         embed = discord.Embed(title="💘 Ship Score", color=ACCENT)
         embed.add_field(name="Couple",    value=f"{a.mention} 💞 {b.mention}", inline=False)
         embed.add_field(name="Ship Name", value=f"**{ship_name}**",             inline=True)
@@ -257,9 +290,22 @@ class Couples(commands.Cog):
             value=f"`[{_bar(pct)}]` **{pct}%**\n{_ship_label(pct)}",
             inline=False,
         )
-        if gif:
-            embed.set_image(url=gif)
-        await ctx.send(embed=embed)
+
+        if banner_file:
+            embed.set_image(url="attachment://ship_banner.png")
+        else:
+            # Fallback: fetch a romantic GIF from the API
+            session = await self._get_session()
+            gif     = await _fetch_gif(session, "ship")
+            if gif:
+                embed.set_image(url=gif)
+
+        embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+
+        if banner_file:
+            await ctx.send(embed=embed, file=banner_file)
+        else:
+            await ctx.send(embed=embed)
 
     # ------------------------------------------------------------------ #
     #  marry
