@@ -100,6 +100,13 @@ CATEGORIES: list[tuple[str, str]] = [
         "`fact` — Get a random fun fact",
     ),
     (
+        "ꪆ Moderation ৻",
+        "`purge <amount>` — Delete recent messages (1–100)\n"
+        "`purgeuser @user <amount>` — Delete a user's recent messages (1–100)\n"
+        "`purgeall @user [amount]` — Delete all of a user's messages (up to 2000)\n"
+        "`purgemi <id/link> [more…]` — Delete specific messages by ID or link",
+    ),
+    (
         "ꪆ Utility ৻",
         "`help` — Show this help menu (`?h`)\n"
         "`ping` — Check the bot's latency\n"

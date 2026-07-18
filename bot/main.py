@@ -33,6 +33,7 @@ class MusicBot(commands.Bot):
         await self.load_extension("cogs.queue")
         await self.load_extension("cogs.audio")
         await self.load_extension("cogs.premium")
+        await self.load_extension("cogs.moderation")
         await self.tree.sync()
         print("Slash commands synced.", flush=True)
 
