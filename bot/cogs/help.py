@@ -51,7 +51,7 @@ CATEGORIES: list[tuple[str, str]] = [
     ),
     (
         "ꪆ Couples ৻",
-        "`ship <user>` — Check compatibility with someone\n"
+        "`ship <user1> [user2]` — Check compatibility between two users\n"
         "`marry <user>` — Propose to someone\n"
         "`divorce <user>` — End a marriage\n"
         "`kiss <user>` — Kiss someone\n"
@@ -64,7 +64,7 @@ CATEGORIES: list[tuple[str, str]] = [
         "ꪆ Games ৻",
         "`rps <choice>` — Rock, paper, scissors\n"
         "`coinflip` — Flip a coin\n"
-        "`dice` — Roll a dice\n"
+        "`dice [sides]` — Roll a dice (default 6, max 100)\n"
         "`tictactoe <user>` — Play tic-tac-toe",
     ),
     (
@@ -112,7 +112,7 @@ class Help(commands.Cog):
             embed.add_field(name=name, value=value, inline=False)
 
         embed.set_footer(
-            text="Made by nova408  •  Use ?help <command> for more information.",
+            text="Made by nova408  •  Use ? or / prefix before any command.",
             icon_url=avatar_url,
         )
 
