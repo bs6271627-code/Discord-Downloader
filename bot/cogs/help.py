@@ -43,17 +43,17 @@ CATEGORIES: list[tuple[str, str]] = [
     ),
     (
         "ꪆ User Lookup ৻",
-        "`avatar <user>` — Show a user's avatar\n"
-        "`banner <user>` — Show a user's banner\n"
-        "`userinfo <user>` — Display user information\n"
-        "`nick <name>` — Change your nickname\n"
-        "`afk <reason>` — Set your AFK status",
+        "`avatar [user]` — Show a user's avatar\n"
+        "`banner [user]` — Show a user's banner\n"
+        "`userinfo [user]` — Display user information\n"
+        "`nick [name]` — Change your nickname\n"
+        "`afk [reason]` — Set your AFK status",
     ),
     (
         "ꪆ Couples ৻",
         "`ship <user1> [user2]` — Check compatibility between two users\n"
         "`marry <user>` — Propose to someone\n"
-        "`divorce <user>` — End a marriage\n"
+        "`divorce` — End your marriage\n"
         "`kiss <user>` — Kiss someone\n"
         "`cuddle <user>` — Cuddle someone\n"
         "`pat <user>` — Pat someone\n"
@@ -86,37 +86,63 @@ CATEGORIES: list[tuple[str, str]] = [
 ]
 
 
+def build_help_embed(bot: commands.Bot) -> discord.Embed:
+    """Build and return the premium help embed. Shared by the command and the mention handler."""
+    avatar_url = bot.user.display_avatar.url if bot.user else None
+
+    embed = discord.Embed(
+        title="🎧 Seraph world - commands 𖹭 ֶָ֢",
+        color=ACCENT,
+    )
+
+    if avatar_url:
+        embed.set_thumbnail(url=avatar_url)
+
+    for name, value in CATEGORIES:
+        embed.add_field(name=name, value=value, inline=False)
+
+    embed.set_footer(
+        text="Made by nova408  •  Use ? or / prefix, or mention @Seraph.",
+        icon_url=avatar_url,
+    )
+    return embed
+
+
 class Help(commands.Cog):
     """Custom premium help command."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
+    # ------------------------------------------------------------------ #
+    #  Help command  (?help / /help)
+    # ------------------------------------------------------------------ #
+
     @commands.hybrid_command(name="help", description="Show the Seraph command menu.")
     async def help_command(self, ctx: commands.Context) -> None:
         await ctx.defer()
+        await ctx.send(embed=build_help_embed(self.bot))
 
-        avatar_url = (
-            self.bot.user.display_avatar.url if self.bot.user else None
-        )
+    # ------------------------------------------------------------------ #
+    #  Bare bot-mention handler  (@Seraph  →  help embed)
+    # ------------------------------------------------------------------ #
 
-        embed = discord.Embed(
-            title="🎧 Seraph world - commands 𖹭 ֶָ֢",
-            color=ACCENT,
-        )
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        """
+        When someone mentions the bot with nothing else, respond with the
+        help embed — the same one produced by ?help / /help.
+        """
+        if message.author.bot or self.bot.user is None:
+            return
 
-        if avatar_url:
-            embed.set_thumbnail(url=avatar_url)
+        # Accept both <@ID> and the legacy <@!ID> mention formats.
+        uid = self.bot.user.id
+        stripped = message.content.strip()
+        if stripped not in (f"<@{uid}>", f"<@!{uid}>"):
+            return
 
-        for name, value in CATEGORIES:
-            embed.add_field(name=name, value=value, inline=False)
-
-        embed.set_footer(
-            text="Made by nova408  •  Use ? or / prefix before any command.",
-            icon_url=avatar_url,
-        )
-
-        await ctx.send(embed=embed)
+        await message.channel.send(embed=build_help_embed(self.bot))
 
 
 async def setup(bot: commands.Bot) -> None:

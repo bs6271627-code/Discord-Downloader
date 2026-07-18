@@ -510,12 +510,12 @@ class Music(commands.Cog):
                     # If the URL also has a video ID (e.g. watch?v=…&list=…),
                     # and RSS is empty, fall back to that single video.
                     if not titles and video_id:
-                        t = await _og_title(
+                        _yt_result = await _youtube_oembed(
                             session,
                             f"https://www.youtube.com/watch?v={video_id}",
                         )
-                        if t:
-                            titles = [t]
+                        if _yt_result:
+                            titles = [_yt_result[0]]
 
                     if not titles:
                         await ctx.send(
