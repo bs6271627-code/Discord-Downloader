@@ -29,10 +29,53 @@ _MENTION_FOOTER_ICON = (
 _mention_cooldown: dict[int, float] = {}
 _MENTION_COOLDOWN_SECS = 10
 
-# Each tuple: (category header, commands text)
-CATEGORIES: list[tuple[str, str]] = [
+# ------------------------------------------------------------------ #
+#  Application emoji cache
+#  Populated once on first /help call via bot.fetch_application_emojis().
+#  Maps emoji name → formatted string, e.g. "playback" → "<:playback:123>"
+# ------------------------------------------------------------------ #
+_emoji_cache: dict[str, str] = {}
+_emoji_cache_loaded: bool = False
+
+
+async def _load_app_emojis(bot: commands.Bot) -> None:
+    """Fetch and cache all application emojis by name (runs once)."""
+    global _emoji_cache_loaded
+    if _emoji_cache_loaded:
+        return
+    try:
+        emojis = await bot.fetch_application_emojis()
+        for emoji in emojis:
+            prefix = "a" if emoji.animated else ""
+            _emoji_cache[emoji.name] = f"<{prefix}:{emoji.name}:{emoji.id}>"
+        _emoji_cache_loaded = True
+        print(f"[help] Loaded {len(_emoji_cache)} application emoji(s).", flush=True)
+    except Exception as exc:
+        print(f"[help] Could not fetch application emojis: {exc}", flush=True)
+        # Mark as loaded anyway so we don't retry on every call
+        _emoji_cache_loaded = True
+
+
+def _cat_header(emoji_key: str, display_name: str) -> str:
+    """
+    Return the field name for a category.
+    Uses the application emoji if available; falls back to the bare display name.
+    """
+    emoji = _emoji_cache.get(emoji_key, "")
+    if emoji:
+        return f"{emoji} {display_name}"
+    return display_name
+
+
+# ------------------------------------------------------------------ #
+#  Category definitions
+#  Each tuple: (emoji_key, display_name, commands_text)
+#  emoji_key must match the Discord Application Emoji name exactly.
+# ------------------------------------------------------------------ #
+CATEGORIES: list[tuple[str, str, str]] = [
     (
-        "ꪆ Playback ৻",
+        "playback",
+        "Playback",
         "`join` — Join your voice channel (`?j`)\n"
         "`leave` — Disconnect and clear the queue (`?lv`)\n"
         "`play <query>` — Play a track or playlist (`?p`)\n"
@@ -43,7 +86,8 @@ CATEGORIES: list[tuple[str, str]] = [
         "`nowplaying` — Show what's currently playing (`?nwp`)",
     ),
     (
-        "ꪆ Queue ৻",
+        "queue",
+        "Queue",
         "`queue` — View the current queue (`?q`)\n"
         "`remove <pos>` — Remove a track from the queue\n"
         "`clearqueue` — Clear the entire queue (`?cq`)\n"
@@ -51,14 +95,16 @@ CATEGORIES: list[tuple[str, str]] = [
         "`loop` — Toggle loop mode",
     ),
     (
-        "ꪆ Audio ৻",
+        "audio",
+        "Audio",
         "`volume <0-200>` — Set the playback volume (`?vol`)\n"
         "`bassboost` — Toggle bass boost\n"
         "`nightcore` — Toggle nightcore filter\n"
         "`filter <name>` — Apply an audio filter",
     ),
     (
-        "ꪆ Premium ৻",
+        "premium",
+        "Premium",
         "`247` — Enable 24/7 mode (stay in VC)\n"
         "`autoplay` — Toggle autoplay related tracks (`?ap`)\n"
         "`lyrics` — Fetch lyrics for the current track\n"
@@ -67,7 +113,8 @@ CATEGORIES: list[tuple[str, str]] = [
         "`enhance` — Optimize the bot, refresh internal systems, and run a health check (`?en`)",
     ),
     (
-        "ꪆ User Lookup ৻",
+        "user_lookup",
+        "User Lookup",
         "`avatar [user]` — Show a user's avatar (`?av`)\n"
         "`banner [user]` — Show a user's banner\n"
         "`userinfo [user]` — Display user information (`?ui`)\n"
@@ -75,7 +122,8 @@ CATEGORIES: list[tuple[str, str]] = [
         "`afk [reason]` — Set your AFK status",
     ),
     (
-        "ꪆ Couples ৻",
+        "couples",
+        "Couples",
         "`ship <user1> [user2]` — Check compatibility between two users\n"
         "`marry <user>` — Propose to someone\n"
         "`divorce` — End your marriage\n"
@@ -86,28 +134,32 @@ CATEGORIES: list[tuple[str, str]] = [
         "`highfive <user>` — High five someone",
     ),
     (
-        "ꪆ Games ৻",
+        "games",
+        "Games",
         "`rps <choice>` — Rock, paper, scissors\n"
         "`coinflip` — Flip a coin\n"
         "`dice [sides]` — Roll a dice (default 6, max 100)\n"
         "`tictactoe <user>` — Play tic-tac-toe",
     ),
     (
-        "ꪆ Fun ৻",
+        "fun",
+        "Fun",
         "`8ball <question>` — Ask the magic 8-ball\n"
         "`rate <thing>` — Rate anything out of 10\n"
         "`meme` — Fetch a random meme\n"
         "`fact` — Get a random fun fact",
     ),
     (
-        "ꪆ Moderation ৻",
+        "moderation",
+        "Moderation",
         "`purge <amount>` — Delete recent messages (1–100)\n"
         "`purgeuser @user <amount>` — Delete a user's recent messages (1–100)\n"
         "`purgeall @user [amount]` — Delete all of a user's messages (up to 2000)\n"
         "`purgemi <id/link> [more…]` — Delete specific messages by ID or link",
     ),
     (
-        "ꪆ Utility ৻",
+        "utility",
+        "Utility",
         "`help` — Show this help menu (`?h`)\n"
         "`ping` — Check the bot's latency\n"
         "`botinfo` — Display bot information\n"
@@ -118,8 +170,11 @@ CATEGORIES: list[tuple[str, str]] = [
 ]
 
 
-def build_help_embed(bot: commands.Bot) -> discord.Embed:
+async def build_help_embed(bot: commands.Bot) -> discord.Embed:
     """Build and return the premium help embed. Shared by the command and the mention handler."""
+    # Ensure application emojis are loaded (cached after first call)
+    await _load_app_emojis(bot)
+
     avatar_url = bot.user.display_avatar.url if bot.user else None
 
     embed = discord.Embed(
@@ -130,8 +185,12 @@ def build_help_embed(bot: commands.Bot) -> discord.Embed:
     if avatar_url:
         embed.set_thumbnail(url=avatar_url)
 
-    for name, value in CATEGORIES:
-        embed.add_field(name=name, value=value, inline=False)
+    for emoji_key, display_name, value in CATEGORIES:
+        embed.add_field(
+            name=_cat_header(emoji_key, display_name),
+            value=value,
+            inline=False,
+        )
 
     embed.set_footer(
         text="Made by nova408  •  Use ? or / prefix, or mention @Seraph.",
@@ -153,7 +212,7 @@ class Help(commands.Cog):
     @commands.hybrid_command(name="help", aliases=["h"], description="Show the Seraph command menu.")
     async def help_command(self, ctx: commands.Context) -> None:
         await ctx.defer()
-        await ctx.send(embed=build_help_embed(self.bot))
+        await ctx.send(embed=await build_help_embed(self.bot))
 
     # ------------------------------------------------------------------ #
     #  Bare bot-mention handler  (@Seraph  →  premium mention embed)
