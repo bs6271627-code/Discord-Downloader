@@ -54,7 +54,7 @@ class QueueCommands(commands.Cog, name="Queue"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="clearqueue", description="Clear the entire queue.")
+    @commands.hybrid_command(name="clearqueue", aliases=["cq"], description="Clear the entire queue.")
     @commands.guild_only()
     async def clearqueue(self, ctx: commands.Context) -> None:
         await ctx.defer()

@@ -78,7 +78,7 @@ class Utility(commands.Cog):
     #  serverinfo
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="serverinfo", description="Display server information.")
+    @commands.hybrid_command(name="serverinfo", aliases=["si"], description="Display server information.")
     @commands.guild_only()
     async def serverinfo(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -307,7 +307,7 @@ class Utility(commands.Cog):
     #  avatar
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="avatar", description="Show a user's avatar.")
+    @commands.hybrid_command(name="avatar", aliases=["av"], description="Show a user's avatar.")
     @app_commands.describe(user="The user whose avatar to show (defaults to you)")
     async def avatar(
         self, ctx: commands.Context, user: discord.User | None = None
@@ -349,7 +349,7 @@ class Utility(commands.Cog):
     #  userinfo
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="userinfo", description="Display information about a user.")
+    @commands.hybrid_command(name="userinfo", aliases=["ui"], description="Display information about a user.")
     @app_commands.describe(user="The user to look up (defaults to you)")
     async def userinfo(
         self, ctx: commands.Context, user: discord.Member | None = None

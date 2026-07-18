@@ -9,26 +9,26 @@ ACCENT = 0xC193CC  # #c193cc
 CATEGORIES: list[tuple[str, str]] = [
     (
         "ꪆ Playback ৻",
-        "`join` — Join your voice channel\n"
-        "`leave` — Disconnect and clear the queue\n"
-        "`play <query>` — Play a track or playlist\n"
-        "`pause` — Pause the current track\n"
-        "`resume` — Resume playback\n"
+        "`join` — Join your voice channel (`?j`)\n"
+        "`leave` — Disconnect and clear the queue (`?lv`)\n"
+        "`play <query>` — Play a track or playlist (`?p`)\n"
+        "`pause` — Pause the current track (`?ps`)\n"
+        "`resume` — Resume playback (`?res`)\n"
         "`skip` — Skip the current track\n"
         "`stop` — Stop playback and clear the queue\n"
-        "`nowplaying` — Show what's currently playing",
+        "`nowplaying` — Show what's currently playing (`?nwp`)",
     ),
     (
         "ꪆ Queue ৻",
-        "`queue` — View the current queue\n"
+        "`queue` — View the current queue (`?q`)\n"
         "`remove <pos>` — Remove a track from the queue\n"
-        "`clearqueue` — Clear the entire queue\n"
+        "`clearqueue` — Clear the entire queue (`?cq`)\n"
         "`shuffle` — Shuffle the queue\n"
         "`loop` — Toggle loop mode",
     ),
     (
         "ꪆ Audio ৻",
-        "`volume <0-200>` — Set the playback volume\n"
+        "`volume <0-200>` — Set the playback volume (`?vol`)\n"
         "`bassboost` — Toggle bass boost\n"
         "`nightcore` — Toggle nightcore filter\n"
         "`filter <name>` — Apply an audio filter",
@@ -36,17 +36,17 @@ CATEGORIES: list[tuple[str, str]] = [
     (
         "ꪆ Premium ৻",
         "`247` — Enable 24/7 mode (stay in VC)\n"
-        "`autoplay` — Toggle autoplay related tracks\n"
+        "`autoplay` — Toggle autoplay related tracks (`?ap`)\n"
         "`lyrics` — Fetch lyrics for the current track\n"
-        "`history` — View recently played tracks\n"
-        "`playlist` — Manage your saved playlists\n"
-        "`enhance` — Optimize the bot, refresh internal systems, and run a health check",
+        "`history` — View recently played tracks (`?his`)\n"
+        "`playlist` — Manage your saved playlists (`?pl`)\n"
+        "`enhance` — Optimize the bot, refresh internal systems, and run a health check (`?en`)",
     ),
     (
         "ꪆ User Lookup ৻",
-        "`avatar [user]` — Show a user's avatar\n"
+        "`avatar [user]` — Show a user's avatar (`?av`)\n"
         "`banner [user]` — Show a user's banner\n"
-        "`userinfo [user]` — Display user information\n"
+        "`userinfo [user]` — Display user information (`?ui`)\n"
         "`nick [member] [name]` — Change your (or another member's) nickname\n"
         "`afk [reason]` — Set your AFK status",
     ),
@@ -77,11 +77,11 @@ CATEGORIES: list[tuple[str, str]] = [
     ),
     (
         "ꪆ Utility ৻",
-        "`help` — Show this help menu\n"
+        "`help` — Show this help menu (`?h`)\n"
         "`ping` — Check the bot's latency\n"
         "`botinfo` — Display bot information\n"
         "`stats` — View bot statistics\n"
-        "`serverinfo` — Display server information\n"
+        "`serverinfo` — Display server information (`?si`)\n"
         "`poll <question>` — Create a poll",
     ),
 ]
@@ -119,7 +119,7 @@ class Help(commands.Cog):
     #  Help command  (?help / /help)
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="help", description="Show the Seraph command menu.")
+    @commands.hybrid_command(name="help", aliases=["h"], description="Show the Seraph command menu.")
     async def help_command(self, ctx: commands.Context) -> None:
         await ctx.defer()
         await ctx.send(embed=build_help_embed(self.bot))

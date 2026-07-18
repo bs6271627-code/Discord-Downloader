@@ -55,7 +55,7 @@ class AudioCommands(commands.Cog, name="Audio"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="volume", description="Set the playback volume (0–200).")
+    @commands.hybrid_command(name="volume", aliases=["vol"], description="Set the playback volume (0–200).")
     @app_commands.describe(level="Volume level: 0–200  (100 = normal)")
     @commands.guild_only()
     @commands.cooldown(1, 3, commands.BucketType.user)
