@@ -47,7 +47,7 @@ CATEGORIES: list[tuple[str, str]] = [
         "`avatar [user]` — Show a user's avatar\n"
         "`banner [user]` — Show a user's banner\n"
         "`userinfo [user]` — Display user information\n"
-        "`nick [name]` — Change your nickname\n"
+        "`nick [member] [name]` — Change your (or another member's) nickname\n"
         "`afk [reason]` — Set your AFK status",
     ),
     (

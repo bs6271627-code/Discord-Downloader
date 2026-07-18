@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import traceback
 import time
 from datetime import datetime, timezone
 
@@ -124,21 +125,135 @@ class Utility(commands.Cog):
     #  nick
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="nick", description="Change your nickname.")
-    @app_commands.describe(name="Your new nickname (leave empty to reset)")
+    @commands.hybrid_command(name="nick", description="Change your nickname (or another member's with Manage Nicknames).")
+    @app_commands.describe(
+        member="Member whose nickname to change (default: yourself)",
+        name="New nickname — leave empty to reset",
+    )
     @commands.guild_only()
-    async def nick(self, ctx: commands.Context, *, name: str | None = None) -> None:
+    async def nick(
+        self,
+        ctx: commands.Context,
+        member: discord.Member | None = None,
+        *,
+        name: str | None = None,
+    ) -> None:
         await ctx.defer(ephemeral=True)
-        member = ctx.author
-        if not isinstance(member, discord.Member):
+
+        guild = ctx.guild
+        if guild is None:
             await ctx.send("❌ This command can only be used in a server.", ephemeral=True)
             return
+
+        invoker = ctx.author
+        if not isinstance(invoker, discord.Member):
+            await ctx.send("❌ This command can only be used in a server.", ephemeral=True)
+            return
+
+        # Resolve target — default to the invoker themselves.
+        target: discord.Member = member or invoker
+        is_self = target.id == invoker.id
+
+        # ── Pre-flight: invoker permissions ─────────────────────────────
+        # Changing someone else's nick requires Manage Nicknames.
+        if not is_self and not invoker.guild_permissions.manage_nicknames:
+            await ctx.send(
+                "❌ You need the **Manage Nicknames** permission to change another member's nickname.",
+                ephemeral=True,
+            )
+            return
+
+        # ── Pre-flight: bot permissions ──────────────────────────────────
+        me = guild.me
+        if not me.guild_permissions.manage_nicknames:
+            await ctx.send(
+                "❌ I'm missing the **Manage Nicknames** permission.\n"
+                "Please make sure my role has that permission (or Administrator).",
+                ephemeral=True,
+            )
+            return
+
+        # ── Pre-flight: cannot change the server owner's nickname ────────
+        if target.id == guild.owner_id:
+            await ctx.send(
+                "❌ Discord does not allow bots to change the **server owner's** nickname.",
+                ephemeral=True,
+            )
+            return
+
+        # ── Pre-flight: role hierarchy ───────────────────────────────────
+        # The bot's highest role must be strictly above the target's.
+        if me.top_role <= target.top_role:
+            await ctx.send(
+                f"❌ I can't edit **{target.display_name}** — their highest role "
+                f"(**{target.top_role.name}**, position {target.top_role.position}) "
+                f"is at or above my highest role "
+                f"(**{me.top_role.name}**, position {me.top_role.position}).",
+                ephemeral=True,
+            )
+            return
+
+        # ── Pre-flight: nickname length ──────────────────────────────────
+        if name is not None and len(name) > 32:
+            await ctx.send(
+                f"❌ Nicknames must be 32 characters or fewer (yours is {len(name)}).",
+                ephemeral=True,
+            )
+            return
+
+        # ── Attempt the edit ─────────────────────────────────────────────
         try:
-            await member.edit(nick=name)
-            msg = f"✅ Nickname reset." if name is None else f"✅ Nickname changed to **{name}**."
-            await ctx.send(msg, ephemeral=True)
-        except discord.Forbidden:
-            await ctx.send("❌ I don't have permission to change your nickname.", ephemeral=True)
+            await target.edit(
+                nick=name,
+                reason=f"nick command — requested by {invoker} ({invoker.id})",
+            )
+        except discord.Forbidden as exc:
+            # Still log the raw error so the workflow console shows the real
+            # Discord error code + message — useful for diagnosing edge cases.
+            print(
+                f"[nick] Forbidden when editing {target!r} ({target.id}) "
+                f"in {guild!r} ({guild.id}) — code={exc.code} text={exc.text!r}",
+                flush=True,
+            )
+            await ctx.send(
+                f"❌ Discord rejected the nickname change (403 Forbidden).\n"
+                f"Discord error code `{exc.code}`: {exc.text or '(no message)'}",
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException as exc:
+            print(
+                f"[nick] HTTPException editing {target!r} in {guild!r} "
+                f"— status={exc.status} code={exc.code} text={exc.text!r}",
+                flush=True,
+            )
+            await ctx.send(
+                f"❌ Discord API error (HTTP {exc.status}, code `{exc.code}`):\n{exc.text or str(exc)}",
+                ephemeral=True,
+            )
+            return
+        except Exception as exc:
+            print(
+                f"[nick] Unexpected error editing {target!r} in {guild!r}:\n"
+                + "".join(traceback.format_exc()),
+                flush=True,
+            )
+            await ctx.send(
+                f"❌ Unexpected error (`{type(exc).__name__}`): {exc}",
+                ephemeral=True,
+            )
+            return
+
+        # ── Success ──────────────────────────────────────────────────────
+        if is_self:
+            msg = "✅ Your nickname has been reset." if name is None else f"✅ Your nickname was changed to **{name}**."
+        else:
+            msg = (
+                f"✅ Reset **{target.display_name}**'s nickname."
+                if name is None
+                else f"✅ Changed **{target.display_name}**'s nickname to **{name}**."
+            )
+        await ctx.send(msg, ephemeral=True)
 
     # ------------------------------------------------------------------ #
     #  afk
