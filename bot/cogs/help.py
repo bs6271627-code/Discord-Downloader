@@ -155,7 +155,14 @@ CATEGORIES: list[tuple[str, str, str]] = [
         "`purge <amount>` — Delete recent messages (1–100)\n"
         "`purgeuser @user <amount>` — Delete a user's recent messages (1–100)\n"
         "`purgeall @user [amount]` — Delete all of a user's messages (up to 2000)\n"
-        "`purgemi <id/link> [more…]` — Delete specific messages by ID or link",
+        "`purgemi <id/link> [more…]` — Delete specific messages by ID or link\n"
+        "`vckick @user` — Disconnect a member from voice\n"
+        "`vcpull @user` — Move a member to your voice channel\n"
+        "`vcpullall <#vc>` — Move all members from a VC to yours\n"
+        "`vcban @user(s)` — Voice ban one or more users\n"
+        "`vcban remove @user` — Remove a voice ban\n"
+        "`vcmute @user` — Server mute / unmute a member in voice\n"
+        "`vcdef @user` — Server deafen / undeafen a member in voice",
     ),
     (
         "utility",
