@@ -26,31 +26,54 @@ _marriages: dict[int, dict[int, int]] = {}
 
 
 # ------------------------------------------------------------------ #
-#  GIF fetching — multi-source with pool cache
+#  GIF fetching — multi-source with pool cache + Giphy fallbacks
 # ------------------------------------------------------------------ #
 
 # nekos.best — returns {"results": [{"url": "..."}]}
+# Requires a descriptive User-Agent; without it the server returns 403.
 _NEKOS_BEST = "https://nekos.best/api/v2/{action}"
+_BOT_UA     = "Seraph-DiscordBot/1.0 (Discord couples & music bot; +https://github.com/seraph-bot)"
 
-# waifu.pics — returns {"url": "..."}
+# waifu.pics — returns {"url": "..."} — DNS blocked on Replit datacenter IPs;
+# kept as source slot 2 so it is attempted and skipped gracefully.
 _WAIFU_PICS = "https://api.waifu.pics/sfw/{action}"
 
+# waifu.im — returns {"images": [{"url": "..."}]}
+_WAIFU_IM   = "https://api.waifu.im/search/?included_tags={action}&gif=true"
+
 # Ordered (api_name, action_slug) sources to try per command.
-# First source that returns a valid URL wins; waifu.pics is the fallback.
+# nekos.best is primary (works on Replit with the UA header above).
+# waifu.pics / waifu.im are fallbacks tried in order.
 _SOURCES: dict[str, list[tuple[str, str]]] = {
-    "kiss":      [("nekos", "kiss"),      ("waifu", "kiss")],
-    "cuddle":    [("nekos", "cuddle"),    ("waifu", "cuddle")],
-    "pat":       [("nekos", "pat"),       ("waifu", "pat")],
-    "wink":      [("nekos", "wink"),      ("waifu", "wink")],
-    "highfive":  [("nekos", "highfive"),  ("waifu", "highfive")],
-    # marry proposal — handhold is the most romantic endpoint available on both APIs
-    "marry":     [("nekos", "handhold"),  ("waifu", "handhold")],
+    "kiss":      [("nekos", "kiss"),     ("waifu", "kiss"),     ("waifuim", "kiss")],
+    "cuddle":    [("nekos", "cuddle"),   ("waifu", "cuddle"),   ("waifuim", "cuddle")],
+    "pat":       [("nekos", "pat"),      ("waifu", "pat"),      ("waifuim", "pat")],
+    "wink":      [("nekos", "wink"),     ("waifu", "wink"),     ("waifuim", "wink")],
+    "highfive":  [("nekos", "highfive"), ("waifu", "highfive"), ("waifuim", "highfive")],
+    # marry proposal — handhold is the most romantic endpoint
+    "marry":     [("nekos", "handhold"), ("waifu", "handhold"), ("waifuim", "handhold")],
     # celebrate when accepted — hug
-    "marry_win": [("nekos", "hug"),       ("waifu", "hug")],
+    "marry_win": [("nekos", "hug"),      ("waifu", "hug"),      ("waifuim", "hug")],
     # divorce — closest semantic match is cry
-    "divorce":   [("nekos", "cry"),       ("waifu", "cry")],
+    "divorce":   [("nekos", "cry"),      ("waifu", "cry"),      ("waifuim", "cry")],
     # ship — holding hands / romantic
-    "ship":      [("nekos", "handhold"),  ("waifu", "handhold")],
+    "ship":      [("nekos", "handhold"), ("waifu", "handhold"), ("waifuim", "handhold")],
+}
+
+# Guaranteed Giphy CDN fallbacks — verified reachable from Replit datacenter IPs.
+# Used only when every live API source fails.
+_GIPHY = "https://media.giphy.com/media/{}/giphy.gif"
+_FALLBACK_GIFS: dict[str, list[str]] = {
+    "kiss":      [_GIPHY.format("3o7abKhOpu0NwenH3O"), _GIPHY.format("G3va31oEEnIkM")],
+    "cuddle":    [_GIPHY.format("OkJat1YNdoD3W"),      _GIPHY.format("f31DK1KpGsyMU")],
+    "pat":       [_GIPHY.format("ARSp9T7wwxNcs"),      _GIPHY.format("IoP0PvbbSWGAM")],
+    "wink":      [_GIPHY.format("ToMjGpx9F5ktZw8qPUQ"), _GIPHY.format("RJzm826vu7WbJvBtxX"),
+                  _GIPHY.format("YA6dmVW0gfIw8")],
+    "highfive":  [_GIPHY.format("l4Jz3a8jO92crUlWM")],
+    "marry":     [_GIPHY.format("3o7TKP9ln2Dr6ze6f6")],
+    "marry_win": [_GIPHY.format("od5H3PmEG5EVq")],
+    "divorce":   [_GIPHY.format("L95W4wv8nnb9K")],
+    "ship":      [_GIPHY.format("3o7abKhOpu0NwenH3O")],
 }
 
 # Pool cache: action_key → (list_of_urls, fetched_at)
@@ -63,11 +86,15 @@ _POOL_SIZE  = 8      # URLs to pre-fetch per action
 
 
 async def _fetch_one(session: aiohttp.ClientSession, api: str, action: str) -> str | None:
-    """Fetch a single GIF URL from nekos.best or waifu.pics."""
+    """Fetch a single GIF URL from nekos.best, waifu.pics, or waifu.im."""
     try:
         if api == "nekos":
             url = _NEKOS_BEST.format(action=action)
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as r:
+            async with session.get(
+                url,
+                timeout=aiohttp.ClientTimeout(total=5),
+                headers={"User-Agent": _BOT_UA},
+            ) as r:
                 if r.status == 200:
                     data = await r.json(content_type=None)
                     results = data.get("results")
@@ -79,6 +106,14 @@ async def _fetch_one(session: aiohttp.ClientSession, api: str, action: str) -> s
                 if r.status == 200:
                     data = await r.json(content_type=None)
                     return data.get("url")
+        elif api == "waifuim":
+            url = _WAIFU_IM.format(action=action)
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as r:
+                if r.status == 200:
+                    data = await r.json(content_type=None)
+                    imgs = data.get("images", [])
+                    if imgs and isinstance(imgs, list):
+                        return imgs[0].get("url")
     except Exception as exc:
         print(f"[gif] {api}/{action} error: {exc}", flush=True)
     return None
@@ -109,10 +144,10 @@ async def _fetch_gif(session: aiohttp.ClientSession, action_key: str) -> str | N
 
     Strategy:
       1. Return from cache pool if still fresh and non-empty.
-      2. If cache is stale/empty, kick off a background pool refresh
-         and fall back to a single fresh fetch for this call.
-      3. Return None only when all sources are unreachable (embed still
-         sends correctly, just without the image).
+      2. If cache is stale/empty, try each live API source in order.
+      3. Kick off a background pool refill (non-blocking).
+      4. If all live sources fail, return a random verified Giphy CDN URL
+         so the embed always has a GIF banner.
     """
     sources = _SOURCES.get(action_key, [])
     if not sources:
@@ -136,6 +171,13 @@ async def _fetch_gif(session: aiohttp.ClientSession, action_key: str) -> str | N
     # ── Kick off background pool refill (non-blocking) ───────────────────
     if pool_age >= _CACHE_TTL or not pool:
         asyncio.create_task(_fill_pool(session, action_key, sources))
+
+    # ── Guaranteed fallback — Giphy CDN (verified reachable on Replit) ───
+    if not gif_url:
+        fallbacks = _FALLBACK_GIFS.get(action_key, [])
+        if fallbacks:
+            gif_url = random.choice(fallbacks)
+            print(f"[gif] using Giphy fallback for '{action_key}'", flush=True)
 
     return gif_url
 
