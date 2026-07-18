@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 
 ACCENT = 0xC193CC  # #c193cc
-MENTION_COLOR = 0xC99FED  # #c99fed  — premium mention embed
+MENTION_COLOR = 0xD1ABED  # #d1abed  — premium mention embed
 
 # Asset URLs used by the mention embed
 _MENTION_AUTHOR_ICON = (
@@ -14,10 +14,10 @@ _MENTION_AUTHOR_ICON = (
     "1527886411921887333/Crown_Purple.gif"
     "?ex=6a5c4a9b&is=6a5af91b&hm=cc1a0634ff1e3dc055bb89cd9f6808e6649b50c506bc4504bfaffab95596ab21&"
 )
-_MENTION_BANNER = (
+_MENTION_THUMBNAIL = (
     "https://cdn.discordapp.com/attachments/1514986569789083810/"
-    "1527893965888684152/New_Project_1999_2957357.gif"
-    "?ex=6a5c51a4&is=6a5b0024&hm=a20710eaf7e872489ba7a35ee51065c4eb7a122107d6018773671366b51d9a39&"
+    "1527899204628910223/New_Project_2000_88A3346.gif"
+    "?ex=6a5c5685&is=6a5b0505&hm=1fd72a067ffc72300155c5ac79cf6414030d0822462422a2c09cb30ccae60442&"
 )
 _MENTION_FOOTER_ICON = (
     "https://cdn.discordapp.com/attachments/1514986569789083810/"
@@ -178,19 +178,23 @@ class Help(commands.Cog):
         # ── Build premium mention embed ──────────────────────────────────
         embed = discord.Embed(
             description=(
-                "Hey there! Thanks for mentioning me.\n\n"
-                "### Creator\n"
-                "<@1239442859103621243>\n\n"
-                "　　　　　　　　　　✦\n\n"
-                "<@1332245879444340789>\n\n"
-                "These are my creators and developers behind **Seraph**. 💜\n\n"
-                "Need help?\n"
-                "Use `?help` or `/help` to explore all my commands."
+                "Thank you for mentioning **Seraph**.\n\n"
+                "I'm a premium multi-purpose music bot built to provide a smooth, "
+                "fast, and feature-rich Discord experience.\n\n"
+                "━━━━━━━━━━━━━━━━━━\n\n"
+                "**Creator**\n"
+                "> <@1239442859103621243>\n"
+                "> <@1487483128309223614>\n\n"
+                "*The creators and developers behind Seraph.*\n\n"
+                "━━━━━━━━━━━━━━━━━━\n\n"
+                "Need help?\n\n"
+                "Use `?help` or `/help` to explore all my commands.\n\n"
+                "━━━━━━━━━━━━━━━━━━"
             ),
             color=MENTION_COLOR,
         )
         embed.set_author(name="Seraph — Premium ✨", icon_url=_MENTION_AUTHOR_ICON)
-        embed.set_image(url=_MENTION_BANNER)
+        embed.set_thumbnail(url=_MENTION_THUMBNAIL)
         embed.set_footer(text="Thanks for using Seraph ✨", icon_url=_MENTION_FOOTER_ICON)
 
         await message.channel.send(embed=embed)
