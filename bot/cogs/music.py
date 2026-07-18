@@ -265,6 +265,9 @@ class Music(commands.Cog):
         player: wavelink.Player = payload.player
         track: wavelink.Playable = payload.track
         channel: discord.TextChannel | None = getattr(player, "home", None)
+        # A new track started — reset the queue-ended flag so a future empty
+        # queue will produce a fresh notification rather than being silenced.
+        player._queue_ended_sent = False  # type: ignore[attr-defined]
         if channel is None:
             return
         await channel.send(embed=_now_playing_embed(track))
@@ -273,8 +276,65 @@ class Music(commands.Cog):
     async def on_wavelink_track_end(
         self, payload: wavelink.TrackEndEventPayload
     ) -> None:
-        # AutoPlayMode.partial handles queue advancement automatically.
-        pass
+        """
+        Send a "Queue Ended" embed exactly once when playback genuinely
+        exhausts the queue.
+
+        Guards:
+        • reason must be "finished" — skips ("replaced") and manual stops
+          ("stopped") are excluded.
+        • AutoPlayMode.enabled (recommendation mode) will add more tracks,
+          so we stay silent.
+        • 24/7 mode keeps the player alive intentionally — stay silent.
+        • asyncio.sleep(0.5) lets Wavelink's own queue-advancement logic run
+          before we inspect player.playing / queue.is_empty, avoiding a race
+          where we'd fire mid-playlist.
+        • _queue_ended_sent flag deduplicates across reconnects or any event
+          that fires multiple times for the same idle session.
+        """
+        # Only act on natural track completion, not skips / stop / cleanup.
+        if payload.reason != "finished":
+            return
+
+        player: wavelink.Player | None = payload.player
+        if player is None:
+            return
+
+        # AutoPlayMode.enabled adds recommendation tracks — queue isn't "done".
+        if player.autoplay == wavelink.AutoPlayMode.enabled:
+            return
+
+        # 24/7 mode keeps the session alive — suppress the notification.
+        if getattr(player, "twentyfour_seven", False):
+            return
+
+        # Give Wavelink a moment to advance to the next queued track (if any).
+        await asyncio.sleep(0.5)
+
+        # If the player is now playing, or the queue still has items, a next
+        # track was already started — this was a normal between-song transition.
+        if player.playing or not player.queue.is_empty:
+            return
+
+        # Deduplicate: only send once per idle session.
+        if getattr(player, "_queue_ended_sent", False):
+            return
+        player._queue_ended_sent = True  # type: ignore[attr-defined]
+
+        channel: discord.TextChannel | None = getattr(player, "home", None)
+        if channel is None:
+            return
+
+        embed = discord.Embed(
+            title="🎵 Queue Ended",
+            description=(
+                "The music queue has finished and there are no more songs to play.\n\n"
+                "Use `?play <song>` or `/play <song>` to start listening again."
+            ),
+            color=_PLAY_COLOR,
+        )
+        embed.set_footer(text="Thanks for listening! ✨")
+        await channel.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_wavelink_track_exception(
