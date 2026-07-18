@@ -179,23 +179,17 @@ class Help(commands.Cog):
         embed = discord.Embed(
             description=(
                 "Thank you for mentioning **Seraph**.\n\n"
-                "I'm a premium multi-purpose music bot built to provide a smooth, "
-                "fast, and feature-rich Discord experience.\n\n"
-                "━━━━━━━━━━━━━━━━━━\n\n"
-                "**Creator**\n"
-                "> <@1239442859103621243>\n"
-                "> <@1487483128309223614>\n\n"
-                "*The creators and developers behind Seraph.*\n\n"
-                "━━━━━━━━━━━━━━━━━━\n\n"
-                "Need help?\n\n"
-                "Use `?help` or `/help` to explore all my commands.\n\n"
-                "━━━━━━━━━━━━━━━━━━"
+                "I'm a premium multi-purpose music bot built for a fast, smooth Discord experience. "
+                "Creators: <@1332245879444340789> & <@1487483128309223614>"
             ),
             color=MENTION_COLOR,
         )
         embed.set_author(name="Seraph — Premium ✨", icon_url=_MENTION_AUTHOR_ICON)
         embed.set_thumbnail(url=_MENTION_THUMBNAIL)
-        embed.set_footer(text="Thanks for using Seraph ✨", icon_url=_MENTION_FOOTER_ICON)
+        embed.set_footer(
+            text="Use `?help` or `/help` to explore all my commands.",
+            icon_url=_MENTION_FOOTER_ICON,
+        )
 
         await message.channel.send(embed=embed)
 
