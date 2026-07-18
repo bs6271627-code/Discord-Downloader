@@ -209,7 +209,7 @@ class Help(commands.Cog):
     #  Help command  (?help / /help)
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="help", aliases=["h"], description="Show the Seraph command menu.")
+    @commands.hybrid_command(name="help", aliases=["h", "H", "Help"], description="Show the Seraph command menu.")
     async def help_command(self, ctx: commands.Context) -> None:
         await ctx.defer()
         await ctx.send(embed=await build_help_embed(self.bot))

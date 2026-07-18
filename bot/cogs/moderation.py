@@ -97,6 +97,7 @@ class Moderation(commands.Cog):
 
     @commands.hybrid_command(
         name="purge",
+        aliases=["Purge"],
         description="Delete a number of recent messages from this channel (1–100).",
     )
     @app_commands.describe(amount="Number of messages to delete (1–100).")
@@ -166,6 +167,7 @@ class Moderation(commands.Cog):
 
     @commands.hybrid_command(
         name="purgeuser",
+        aliases=["Purgeuser"],
         description="Delete a specific user's most recent messages from this channel.",
     )
     @app_commands.describe(
@@ -258,6 +260,7 @@ class Moderation(commands.Cog):
 
     @commands.hybrid_command(
         name="purgeall",
+        aliases=["Purgeall"],
         description="Delete all available messages from a user in this channel.",
     )
     @app_commands.describe(
@@ -367,6 +370,7 @@ class Moderation(commands.Cog):
 
     @commands.hybrid_command(
         name="purgemi",
+        aliases=["Purgemi"],
         description="Delete specific messages by their IDs or Discord message links.",
     )
     @app_commands.describe(

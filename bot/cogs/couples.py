@@ -275,7 +275,7 @@ class Couples(commands.Cog):
     #  ship
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="ship", description="Check the compatibility between two users.")
+    @commands.hybrid_command(name="ship", aliases=["Ship"], description="Check the compatibility between two users.")
     @app_commands.describe(user1="First user", user2="Second user (defaults to you)")
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def ship(
@@ -353,7 +353,7 @@ class Couples(commands.Cog):
     #  marry
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="marry", description="Propose to another user.")
+    @commands.hybrid_command(name="marry", aliases=["Marry"], description="Propose to another user.")
     @app_commands.describe(member="The person you want to marry")
     @commands.cooldown(1, 10, commands.BucketType.user)
     @commands.guild_only()
@@ -430,7 +430,7 @@ class Couples(commands.Cog):
     #  divorce
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="divorce", description="Divorce your current spouse.")
+    @commands.hybrid_command(name="divorce", aliases=["Divorce"], description="Divorce your current spouse.")
     @commands.cooldown(1, 10, commands.BucketType.user)
     @commands.guild_only()
     async def divorce(self, ctx: commands.Context) -> None:
@@ -481,7 +481,7 @@ class Couples(commands.Cog):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="kiss", description="Kiss someone! 💋")
+    @commands.hybrid_command(name="kiss", aliases=["Kiss"], description="Kiss someone! 💋")
     @app_commands.describe(member="Who to kiss")
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
@@ -489,7 +489,7 @@ class Couples(commands.Cog):
         await self._gif_cmd(ctx, member, "kiss", "💋 Kiss",
                             f"{ctx.author.mention} kissed {member.mention}! 💋")
 
-    @commands.hybrid_command(name="cuddle", description="Cuddle someone! 🤗")
+    @commands.hybrid_command(name="cuddle", aliases=["Cuddle"], description="Cuddle someone! 🤗")
     @app_commands.describe(member="Who to cuddle")
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
@@ -497,7 +497,7 @@ class Couples(commands.Cog):
         await self._gif_cmd(ctx, member, "cuddle", "🤗 Cuddle",
                             f"{ctx.author.mention} cuddled {member.mention}! 🤗")
 
-    @commands.hybrid_command(name="pat", description="Pat someone! 🥰")
+    @commands.hybrid_command(name="pat", aliases=["Pat"], description="Pat someone! 🥰")
     @app_commands.describe(member="Who to pat")
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
@@ -505,7 +505,7 @@ class Couples(commands.Cog):
         await self._gif_cmd(ctx, member, "pat", "🥰 Pat",
                             f"{ctx.author.mention} gave {member.mention} a pat! 🥰")
 
-    @commands.hybrid_command(name="wink", description="Wink at someone! 😉")
+    @commands.hybrid_command(name="wink", aliases=["Wink"], description="Wink at someone! 😉")
     @app_commands.describe(member="Who to wink at")
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()
@@ -513,7 +513,7 @@ class Couples(commands.Cog):
         await self._gif_cmd(ctx, member, "wink", "😉 Wink",
                             f"{ctx.author.mention} winked at {member.mention}! 😏")
 
-    @commands.hybrid_command(name="highfive", description="High five someone! 🙌")
+    @commands.hybrid_command(name="highfive", aliases=["Highfive"], description="High five someone! 🙌")
     @app_commands.describe(member="Who to high five")
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.guild_only()

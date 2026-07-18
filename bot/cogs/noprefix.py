@@ -71,6 +71,7 @@ class NoPrefix(commands.Cog):
 
     @commands.group(
         name="np",
+        aliases=["Np"],
         invoke_without_command=True,
         brief="No Prefix management (Bot Owners only).",
     )
@@ -97,7 +98,7 @@ class NoPrefix(commands.Cog):
 
     # ── np add ─────────────────────────────────────────────────────── #
 
-    @np_group.command(name="add", brief="Grant No Prefix access to a user.")
+    @np_group.command(name="add", aliases=["Add"], brief="Grant No Prefix access to a user.")
     async def np_add(self, ctx: commands.Context, user: discord.User) -> None:
         """?np add <user>  —  Grant a user permanent No Prefix access."""
         if not _owner_only(ctx):
@@ -134,7 +135,7 @@ class NoPrefix(commands.Cog):
 
     # ── np remove ──────────────────────────────────────────────────── #
 
-    @np_group.command(name="remove", aliases=["rm"], brief="Revoke No Prefix access from a user.")
+    @np_group.command(name="remove", aliases=["rm", "Rm", "Remove"], brief="Revoke No Prefix access from a user.")
     async def np_remove(self, ctx: commands.Context, user: discord.User) -> None:
         """?np remove <user>  —  Revoke a user's No Prefix access."""
         if not _owner_only(ctx):
@@ -169,7 +170,7 @@ class NoPrefix(commands.Cog):
 
     # ── np list ────────────────────────────────────────────────────── #
 
-    @np_group.command(name="list", brief="List all users with No Prefix access.")
+    @np_group.command(name="list", aliases=["List"], brief="List all users with No Prefix access.")
     async def np_list(self, ctx: commands.Context) -> None:
         """?np list  —  Display every user who currently has No Prefix access."""
         if not _owner_only(ctx):

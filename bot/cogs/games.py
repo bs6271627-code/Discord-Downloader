@@ -137,7 +137,7 @@ class Games(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.hybrid_command(name="rps", description="Play rock, paper, scissors against the bot.")
+    @commands.hybrid_command(name="rps", aliases=["Rps"], description="Play rock, paper, scissors against the bot.")
     @app_commands.describe(choice="rock, paper, or scissors")
     @app_commands.choices(choice=[
         app_commands.Choice(name="Rock 🪨", value="rock"),
@@ -167,7 +167,7 @@ class Games(commands.Cog):
         embed.add_field(name="Result", value=f"**{result}**", inline=False)
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="coinflip", description="Flip a coin.")
+    @commands.hybrid_command(name="coinflip", aliases=["Coinflip"], description="Flip a coin.")
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def coinflip(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -180,7 +180,7 @@ class Games(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="dice", description="Roll a dice.")
+    @commands.hybrid_command(name="dice", aliases=["Dice"], description="Roll a dice.")
     @app_commands.describe(sides="Number of sides (default 6, max 100)")
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def dice(self, ctx: commands.Context, sides: int = 6) -> None:
@@ -197,7 +197,7 @@ class Games(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="tictactoe", description="Challenge another user to tic-tac-toe.")
+    @commands.hybrid_command(name="tictactoe", aliases=["Tictactoe"], description="Challenge another user to tic-tac-toe.")
     @app_commands.describe(member="The player to challenge")
     @commands.guild_only()
     async def tictactoe(self, ctx: commands.Context, member: discord.Member) -> None:

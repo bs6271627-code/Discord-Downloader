@@ -71,7 +71,7 @@ class Fun(commands.Cog):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="rate", description="Rate anything out of 10.")
+    @commands.hybrid_command(name="rate", aliases=["Rate"], description="Rate anything out of 10.")
     @app_commands.describe(thing="What to rate")
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def rate(self, ctx: commands.Context, *, thing: str) -> None:
@@ -101,7 +101,7 @@ class Fun(commands.Cog):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="meme", description="Get a random meme.")
+    @commands.hybrid_command(name="meme", aliases=["Meme"], description="Get a random meme.")
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def meme(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -130,7 +130,7 @@ class Fun(commands.Cog):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="fact", description="Get a random fun fact.")
+    @commands.hybrid_command(name="fact", aliases=["Fact"], description="Get a random fun fact.")
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def fact(self, ctx: commands.Context) -> None:
         await ctx.defer()

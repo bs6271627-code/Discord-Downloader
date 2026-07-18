@@ -406,7 +406,7 @@ class Music(commands.Cog):
     #  Commands  (hybrid = slash /cmd + prefix ?cmd + mention @Bot cmd)
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="join", aliases=["j"], description="Join your current voice channel.")
+    @commands.hybrid_command(name="join", aliases=["j", "J", "Join"], description="Join your current voice channel.")
     async def join(self, ctx: commands.Context) -> None:
         await ctx.defer(ephemeral=True)
 
@@ -428,7 +428,7 @@ class Music(commands.Cog):
         await ctx.send(f"✅ Joined **{channel.name}**.", ephemeral=True)
 
     @commands.hybrid_command(
-        name="leave", aliases=["lv"], description="Leave the voice channel and clear the queue."
+        name="leave", aliases=["lv", "Lv", "Leave"], description="Leave the voice channel and clear the queue."
     )
     async def leave(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -445,7 +445,7 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(
         name="play",
-        aliases=["p"],
+        aliases=["p", "P", "Play"],
         description="Play a song — search by name or paste a YouTube / Spotify URL.",
     )
     @app_commands.describe(
@@ -755,7 +755,7 @@ class Music(commands.Cog):
     #  Remaining playback commands (unchanged)
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="pause", aliases=["ps"], description="Pause the current track.")
+    @commands.hybrid_command(name="pause", aliases=["ps", "Ps", "Pause"], description="Pause the current track.")
     async def pause(self, ctx: commands.Context) -> None:
         await ctx.defer()
         player = await self._get_player(ctx)
@@ -770,7 +770,7 @@ class Music(commands.Cog):
         await player.pause(True)
         await ctx.send("⏸ Paused.")
 
-    @commands.hybrid_command(name="resume", aliases=["res"], description="Resume the paused track.")
+    @commands.hybrid_command(name="resume", aliases=["res", "Res", "Resume"], description="Resume the paused track.")
     async def resume(self, ctx: commands.Context) -> None:
         await ctx.defer()
         player = await self._get_player(ctx)
@@ -782,7 +782,7 @@ class Music(commands.Cog):
         await player.pause(False)
         await ctx.send("▶️ Resumed.")
 
-    @commands.hybrid_command(name="skip", description="Skip the current track.")
+    @commands.hybrid_command(name="skip", aliases=["Skip"], description="Skip the current track.")
     async def skip(self, ctx: commands.Context) -> None:
         await ctx.defer()
         player = await self._get_player(ctx)
@@ -795,7 +795,7 @@ class Music(commands.Cog):
         await ctx.send("⏭ Skipped.")
 
     @commands.hybrid_command(
-        name="stop", description="Stop playback and clear the queue."
+        name="stop", aliases=["Stop"], description="Stop playback and clear the queue."
     )
     async def stop(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -806,7 +806,7 @@ class Music(commands.Cog):
         await player.stop()
         await ctx.send("⏹ Stopped and cleared the queue.")
 
-    @commands.hybrid_command(name="queue", aliases=["q"], description="View the current queue.")
+    @commands.hybrid_command(name="queue", aliases=["q", "Q", "Queue"], description="View the current queue.")
     async def queue_cmd(self, ctx: commands.Context) -> None:
         await ctx.defer()
         player: wavelink.Player | None = ctx.guild.voice_client  # type: ignore[assignment]
@@ -836,7 +836,7 @@ class Music(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.hybrid_command(
-        name="nowplaying", aliases=["nwp"], description="Show what's currently playing."
+        name="nowplaying", aliases=["nwp", "Nwp", "Nowplaying"], description="Show what's currently playing."
     )
     async def nowplaying(self, ctx: commands.Context) -> None:
         await ctx.defer()

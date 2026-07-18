@@ -27,7 +27,7 @@ class Utility(commands.Cog):
     #  ping
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="ping", description="Check the bot's latency.")
+    @commands.hybrid_command(name="ping", aliases=["Ping"], description="Check the bot's latency.")
     async def ping(self, ctx: commands.Context) -> None:
         await ctx.defer()
         latency = round(self.bot.latency * 1000)
@@ -42,7 +42,7 @@ class Utility(commands.Cog):
     #  botinfo
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="botinfo", description="Display bot information.")
+    @commands.hybrid_command(name="botinfo", aliases=["Botinfo"], description="Display bot information.")
     async def botinfo(self, ctx: commands.Context) -> None:
         await ctx.defer()
         bot_user = self.bot.user
@@ -64,7 +64,7 @@ class Utility(commands.Cog):
     #  stats
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="stats", description="View bot statistics.")
+    @commands.hybrid_command(name="stats", aliases=["Stats"], description="View bot statistics.")
     async def stats(self, ctx: commands.Context) -> None:
         await ctx.defer()
         total_members = sum(g.member_count or 0 for g in self.bot.guilds)
@@ -81,7 +81,7 @@ class Utility(commands.Cog):
     #  serverinfo
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="serverinfo", aliases=["si"], description="Display server information.")
+    @commands.hybrid_command(name="serverinfo", aliases=["si", "Si", "Serverinfo"], description="Display server information.")
     @commands.guild_only()
     async def serverinfo(self, ctx: commands.Context) -> None:  # noqa: C901
         await ctx.defer()
@@ -250,7 +250,7 @@ class Utility(commands.Cog):
     #  poll
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="poll", description="Create a yes/no poll.")
+    @commands.hybrid_command(name="poll", aliases=["Poll"], description="Create a yes/no poll.")
     @app_commands.describe(question="The poll question")
     async def poll(self, ctx: commands.Context, *, question: str) -> None:
         await ctx.defer()
@@ -269,7 +269,7 @@ class Utility(commands.Cog):
     #  nick
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="nick", description="Change your nickname (or another member's with Manage Nicknames).")
+    @commands.hybrid_command(name="nick", aliases=["Nick"], description="Change your nickname (or another member's with Manage Nicknames).")
     @app_commands.describe(
         member="Member whose nickname to change (default: yourself)",
         name="New nickname — leave empty to reset",
@@ -403,7 +403,7 @@ class Utility(commands.Cog):
     #  afk
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="afk", description="Set your AFK status.")
+    @commands.hybrid_command(name="afk", aliases=["Afk"], description="Set your AFK status.")
     @app_commands.describe(reason="Why you're going AFK")
     @commands.guild_only()
     async def afk(self, ctx: commands.Context, *, reason: str = "AFK") -> None:
@@ -451,7 +451,7 @@ class Utility(commands.Cog):
     #  avatar
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="avatar", aliases=["av"], description="Show a user's avatar.")
+    @commands.hybrid_command(name="avatar", aliases=["av", "Av", "Avatar"], description="Show a user's avatar.")
     @app_commands.describe(user="The user whose avatar to show (defaults to you)")
     async def avatar(
         self, ctx: commands.Context, user: discord.User | None = None
@@ -471,7 +471,7 @@ class Utility(commands.Cog):
     #  banner
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="banner", description="Show a user's banner.")
+    @commands.hybrid_command(name="banner", aliases=["Banner"], description="Show a user's banner.")
     @app_commands.describe(user="The user whose banner to show (defaults to you)")
     async def banner(
         self, ctx: commands.Context, user: discord.User | None = None
@@ -493,7 +493,7 @@ class Utility(commands.Cog):
     #  userinfo
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="userinfo", aliases=["ui"], description="Display information about a user.")
+    @commands.hybrid_command(name="userinfo", aliases=["ui", "Ui", "Userinfo"], description="Display information about a user.")
     @app_commands.describe(user="The user to look up (defaults to you)")
     async def userinfo(
         self, ctx: commands.Context, user: discord.Member | None = None

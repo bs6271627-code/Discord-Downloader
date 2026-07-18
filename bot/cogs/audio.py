@@ -55,7 +55,7 @@ class AudioCommands(commands.Cog, name="Audio"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="volume", aliases=["vol"], description="Set the playback volume (0–200).")
+    @commands.hybrid_command(name="volume", aliases=["vol", "Vol", "Volume"], description="Set the playback volume (0–200).")
     @app_commands.describe(level="Volume level: 0–200  (100 = normal)")
     @commands.guild_only()
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -79,7 +79,7 @@ class AudioCommands(commands.Cog, name="Audio"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="bassboost", description="Toggle bass boost filter.")
+    @commands.hybrid_command(name="bassboost", aliases=["Bassboost"], description="Toggle bass boost filter.")
     @commands.guild_only()
     async def bassboost(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -101,7 +101,7 @@ class AudioCommands(commands.Cog, name="Audio"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="nightcore", description="Toggle nightcore (speed + pitch up).")
+    @commands.hybrid_command(name="nightcore", aliases=["Nightcore"], description="Toggle nightcore (speed + pitch up).")
     @commands.guild_only()
     async def nightcore(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -123,7 +123,7 @@ class AudioCommands(commands.Cog, name="Audio"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="filter", description="Apply an audio filter preset.")
+    @commands.hybrid_command(name="filter", aliases=["Filter"], description="Apply an audio filter preset.")
     @app_commands.describe(name="Choose a preset filter to apply")
     @app_commands.choices(name=PRESET_CHOICES)
     @commands.guild_only()

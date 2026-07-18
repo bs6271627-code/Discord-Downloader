@@ -25,7 +25,7 @@ class QueueCommands(commands.Cog, name="Queue"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="remove", description="Remove a track from the queue by position.")
+    @commands.hybrid_command(name="remove", aliases=["Remove"], description="Remove a track from the queue by position.")
     @app_commands.describe(position="Queue position to remove (1 = next track)")
     @commands.guild_only()
     async def remove(self, ctx: commands.Context, position: int) -> None:
@@ -54,7 +54,7 @@ class QueueCommands(commands.Cog, name="Queue"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="clearqueue", aliases=["cq"], description="Clear the entire queue.")
+    @commands.hybrid_command(name="clearqueue", aliases=["cq", "Cq", "Clearqueue"], description="Clear the entire queue.")
     @commands.guild_only()
     async def clearqueue(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -67,7 +67,7 @@ class QueueCommands(commands.Cog, name="Queue"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="shuffle", description="Shuffle the queue.")
+    @commands.hybrid_command(name="shuffle", aliases=["Shuffle"], description="Shuffle the queue.")
     @commands.guild_only()
     async def shuffle(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -87,7 +87,7 @@ class QueueCommands(commands.Cog, name="Queue"):
 
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="loop", description="Cycle loop mode: off → track → queue → off.")
+    @commands.hybrid_command(name="loop", aliases=["Loop"], description="Cycle loop mode: off → track → queue → off.")
     @commands.guild_only()
     async def loop(self, ctx: commands.Context) -> None:
         await ctx.defer()

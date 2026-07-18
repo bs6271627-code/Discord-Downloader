@@ -109,7 +109,7 @@ class Premium(commands.Cog):
     #  autoplay
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="autoplay", aliases=["ap"], description="Toggle autoplay of related tracks.")
+    @commands.hybrid_command(name="autoplay", aliases=["ap", "Ap", "Autoplay"], description="Toggle autoplay of related tracks.")
     @commands.guild_only()
     async def autoplay(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -128,7 +128,7 @@ class Premium(commands.Cog):
     #  lyrics
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="lyrics", description="Fetch lyrics for the current track.")
+    @commands.hybrid_command(name="lyrics", aliases=["Lyrics"], description="Fetch lyrics for the current track.")
     @commands.guild_only()
     async def lyrics(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -177,7 +177,7 @@ class Premium(commands.Cog):
     #  history
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="history", aliases=["his"], description="View recently played tracks.")
+    @commands.hybrid_command(name="history", aliases=["his", "His", "History"], description="View recently played tracks.")
     @commands.guild_only()
     async def history(self, ctx: commands.Context) -> None:
         await ctx.defer()
@@ -199,7 +199,7 @@ class Premium(commands.Cog):
     #  playlist
     # ------------------------------------------------------------------ #
 
-    @commands.hybrid_command(name="playlist", aliases=["pl"], description="Manage saved playlists: list · save · load · delete")
+    @commands.hybrid_command(name="playlist", aliases=["pl", "Pl", "Playlist"], description="Manage saved playlists: list · save · load · delete")
     @app_commands.describe(
         action="Action to perform (list / save / load / delete)",
         name="Playlist name (required for save / load / delete)",
@@ -312,7 +312,7 @@ class Premium(commands.Cog):
 
     @commands.hybrid_command(
         name="enhance",
-        aliases=["en"],
+        aliases=["en", "En", "Enhance"],
         description="Optimize the bot, refresh the voice session, and run a full health check.",
     )
     @app_commands.default_permissions(administrator=True)
