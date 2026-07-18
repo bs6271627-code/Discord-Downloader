@@ -10,10 +10,8 @@ from discord.ext import commands
 
 ACCENT = 0xC193CC  # #c193cc
 
-# ── Application emoji placeholders ──────────────────────────────────────────
-# Replace <OWNER_EMOJI> with your Discord Application Emoji, e.g.:
-#   <:crown:1527961577171451945>
-_CROWN_EMOJI = "<OWNER_EMOJI>"
+# ── Application emojis ───────────────────────────────────────────────────────
+_CROWN_EMOJI = "<:crown:1527961577171451945>"
 
 # In-memory AFK store: {guild_id: {user_id: reason}}
 _afk: dict[int, dict[int, str]] = {}
@@ -92,126 +90,120 @@ class Utility(commands.Cog):
             await ctx.send("❌ This command can only be used in a server.", ephemeral=True)
             return
 
-        # ── Helper ──────────────────────────────────────────────────────
-        def _fmt(label: str, value: str) -> str:
-            """Single line: **label** — value"""
-            return f"**{label}** — {value}"
-
-        # ── About ───────────────────────────────────────────────────────
+        # ── About ────────────────────────────────────────────────────────
         owner_mention = f"<@{guild.owner_id}>"
-        created_dt = discord.utils.format_dt(guild.created_at, style="D")
-        created_rel = discord.utils.format_dt(guild.created_at, style="R")
-        about_lines = [
-            _fmt("Server Name", guild.name),
-            _fmt("Server ID", str(guild.id)),
-            _fmt(f"Owner {_CROWN_EMOJI}", owner_mention),
-            _fmt("Created At", f"{created_dt} ({created_rel})"),
-            _fmt("Member Count", str(guild.member_count or 0)),
-        ]
-
-        # ── Description ─────────────────────────────────────────────────
-        description_text = guild.description or "None"
-
-        # ── Features ────────────────────────────────────────────────────
-        if guild.features:
-            features_list = "\n".join(
-                f"• {f.replace('_', ' ').title()}" for f in sorted(guild.features)
-            )
-        else:
-            features_list = "None"
-
-        # ── Extras ──────────────────────────────────────────────────────
-        afk_ch = guild.afk_channel.mention if guild.afk_channel else "None"
-        afk_timeout = (
-            f"{guild.afk_timeout // 60} min" if guild.afk_timeout else "None"
+        created_dt    = discord.utils.format_dt(guild.created_at, style="D")
+        created_rel   = discord.utils.format_dt(guild.created_at, style="R")
+        about_val = (
+            f"> **Name** — {guild.name}\n"
+            f"> **ID** — `{guild.id}`\n"
+            f"> **Owner** {_CROWN_EMOJI} — {owner_mention}\n"
+            f"> **Created** — {created_dt} *({created_rel})*\n"
+            f"> **Members** — {guild.member_count or 0:,}"
         )
-        sys_ch = guild.system_channel.mention if guild.system_channel else "None"
-        rules_ch = guild.rules_channel.mention if guild.rules_channel else "None"
-        bitrate_kbps = f"{guild.bitrate_limit // 1000} kbps"
-        extras_lines = [
-            _fmt("Verification Level", str(guild.verification_level).replace("_", " ").title()),
-            _fmt("AFK Channel", afk_ch),
-            _fmt("AFK Timeout", afk_timeout),
-            _fmt("System Channel", sys_ch),
-            _fmt("Rules Channel", rules_ch),
-            _fmt("NSFW Level", str(guild.nsfw_level).replace("_", " ").title()),
-            _fmt("Explicit Content Filter", str(guild.explicit_content_filter).replace("_", " ").title()),
-            _fmt("Preferred Locale", str(guild.preferred_locale)),
-            _fmt("Max Bitrate", bitrate_kbps),
-        ]
 
-        # ── Members ─────────────────────────────────────────────────────
-        cached = list(guild.members)  # may be partial without members intent
+        # ── Description ──────────────────────────────────────────────────
+        desc_val = (
+            f"> {guild.description}"
+            if guild.description
+            else "> *No description set.*"
+        )
+
+        # ── Features ─────────────────────────────────────────────────────
+        if guild.features:
+            pills = "  ·  ".join(
+                f"`{f.replace('_', ' ').title()}`" for f in sorted(guild.features)
+            )
+            features_val = pills if len(pills) <= 1000 else pills[:997] + "…"
+        else:
+            features_val = "*No features enabled.*"
+
+        # ── Extras ───────────────────────────────────────────────────────
+        afk_ch      = guild.afk_channel.mention if guild.afk_channel else "None"
+        afk_timeout = f"{guild.afk_timeout // 60} min" if guild.afk_timeout else "None"
+        sys_ch      = guild.system_channel.mention if guild.system_channel else "None"
+        rules_ch    = guild.rules_channel.mention if guild.rules_channel else "None"
+        extras_val = (
+            f"**Verification** — {str(guild.verification_level).replace('_', ' ').title()}"
+            f"  ·  **NSFW Level** — {str(guild.nsfw_level).replace('_', ' ').title()}\n"
+            f"**Explicit Filter** — {str(guild.explicit_content_filter).replace('_', ' ').title()}"
+            f"  ·  **Locale** — {guild.preferred_locale}\n"
+            f"**AFK Channel** — {afk_ch}  ·  **AFK Timeout** — {afk_timeout}\n"
+            f"**System Channel** — {sys_ch}  ·  **Rules Channel** — {rules_ch}\n"
+            f"**Max Bitrate** — {guild.bitrate_limit // 1000} kbps"
+        )
+
+        # ── Members ──────────────────────────────────────────────────────
+        cached        = list(guild.members)   # partial without members intent
         total_members = guild.member_count or 0
         if cached:
-            humans = sum(1 for m in cached if not m.bot)
-            bots = sum(1 for m in cached if m.bot)
-            online = sum(
+            humans     = sum(1 for m in cached if not m.bot)
+            bots_count = sum(1 for m in cached if m.bot)
+            online     = sum(
                 1 for m in cached
                 if hasattr(m, "status") and m.status != discord.Status.offline
             )
-            online_str = str(online)
+            online_str = f"{online:,}"
         else:
-            humans = "N/A"
-            bots = "N/A"
+            humans     = "N/A"
+            bots_count = "N/A"
             online_str = "N/A"
-        members_lines = [
-            _fmt("Total Members", str(total_members)),
-            _fmt("Humans", str(humans)),
-            _fmt("Bots", str(bots)),
-            _fmt("Online Members", online_str),
-        ]
 
-        # ── Channels ────────────────────────────────────────────────────
+        # 3-column inline grid — section header on first column
+        mem_col1 = f"**Total**\n{total_members:,}\n\u200b\n**Online**\n{online_str}"
+        mem_col2 = f"**Humans**\n{humans:,}" if isinstance(humans, int) else f"**Humans**\n{humans}"
+        mem_col3 = f"**Bots**\n{bots_count:,}" if isinstance(bots_count, int) else f"**Bots**\n{bots_count}"
+
+        # ── Channels ─────────────────────────────────────────────────────
         news_count = sum(
             1 for ch in guild.channels
             if isinstance(ch, discord.TextChannel) and ch.is_news()
         )
-        channels_lines = [
-            _fmt("Categories", str(len(guild.categories))),
-            _fmt("Text Channels", str(len(guild.text_channels))),
-            _fmt("Voice Channels", str(len(guild.voice_channels))),
-            _fmt("Forum Channels", str(len(guild.forums))),
-            _fmt("Stage Channels", str(len(guild.stage_channels))),
-            _fmt("Announcement Channels", str(news_count)),
-            _fmt("Threads", str(len(guild.threads))),
-        ]
+        channels_val = (
+            f"**Text** — {len(guild.text_channels)}  ·  "
+            f"**Voice** — {len(guild.voice_channels)}  ·  "
+            f"**Categories** — {len(guild.categories)}\n"
+            f"**Forum** — {len(guild.forums)}  ·  "
+            f"**Stage** — {len(guild.stage_channels)}  ·  "
+            f"**Announcement** — {news_count}  ·  "
+            f"**Threads** — {len(guild.threads)}"
+        )
 
-        # ── Emoji Info ───────────────────────────────────────────────────
-        regular_emojis = sum(1 for e in guild.emojis if not e.animated)
+        # ── Emoji Info ────────────────────────────────────────────────────
+        regular_emojis  = sum(1 for e in guild.emojis if not e.animated)
         animated_emojis = sum(1 for e in guild.emojis if e.animated)
-        sticker_count = len(guild.stickers)
-        total_emoji = regular_emojis + animated_emojis + sticker_count
-        emoji_lines = [
-            _fmt("Regular Emojis", str(regular_emojis)),
-            _fmt("Animated Emojis", str(animated_emojis)),
-            _fmt("Stickers", str(sticker_count)),
-            _fmt("Total", str(total_emoji)),
-        ]
+        sticker_count   = len(guild.stickers)
+        total_emoji     = regular_emojis + animated_emojis + sticker_count
+        emoji_val = (
+            f"**Regular** — {regular_emojis}  ·  "
+            f"**Animated** — {animated_emojis}  ·  "
+            f"**Stickers** — {sticker_count}  ·  "
+            f"**Total** — {total_emoji}"
+        )
 
-        # ── Boost Status ─────────────────────────────────────────────────
+        # ── Boost Status ──────────────────────────────────────────────────
         boost_role = (
             guild.premium_subscriber_role.mention
             if guild.premium_subscriber_role
             else "None"
         )
-        boost_lines = [
-            _fmt("Boost Level", f"Level {guild.premium_tier}"),
-            _fmt("Boost Count", str(guild.premium_subscription_count or 0)),
-            _fmt("Booster Role", boost_role),
-        ]
+        boost_count = guild.premium_subscription_count or 0
+        # 3-column inline grid
+        boost_col1 = f"**Level**\n{guild.premium_tier}"
+        boost_col2 = f"**Boosts**\n{boost_count}"
+        boost_col3 = f"**Booster Role**\n{boost_role}"
 
-        # ── Server Roles ─────────────────────────────────────────────────
+        # ── Server Roles ──────────────────────────────────────────────────
         roles = [r for r in reversed(guild.roles) if r.name != "@everyone"]
         if roles:
-            shown = roles[:20]
+            shown      = roles[:20]
             role_pills = " ".join(r.mention for r in shown)
             if len(roles) > 20:
                 role_pills += f"\n**+{len(roles) - 20} more…**"
         else:
-            role_pills = "None"
+            role_pills = "*No roles configured.*"
 
-        # ── Build embed ──────────────────────────────────────────────────
+        # ── Build embed ───────────────────────────────────────────────────
         embed = discord.Embed(title=guild.name, color=ACCENT)
 
         # Thumbnail: server icon → bot avatar
@@ -220,64 +212,35 @@ class Utility(commands.Cog):
         elif self.bot.user:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
-        # Banner image
+        # Server banner as bottom image
         if guild.banner:
             embed.set_image(url=guild.banner.url)
 
-        # Sections
-        embed.add_field(
-            name="__**About**__",
-            value="\n".join(about_lines),
-            inline=False,
-        )
-        embed.add_field(
-            name="__**Description**__",
-            value=description_text,
-            inline=False,
-        )
-        embed.add_field(
-            name="__**Features**__",
-            value=features_list,
-            inline=False,
-        )
-        embed.add_field(
-            name="__**Extras**__",
-            value="\n".join(extras_lines),
-            inline=False,
-        )
-        embed.add_field(
-            name="__**Members**__",
-            value="\n".join(members_lines),
-            inline=False,
-        )
-        embed.add_field(
-            name="__**Channels**__",
-            value="\n".join(channels_lines),
-            inline=False,
-        )
-        embed.add_field(
-            name="__**Emoji Info**__",
-            value="\n".join(emoji_lines),
-            inline=False,
-        )
-        embed.add_field(
-            name="__**Boost Status**__",
-            value="\n".join(boost_lines),
-            inline=False,
-        )
-        embed.add_field(
-            name="__**Server Roles**__",
-            value=role_pills,
-            inline=False,
-        )
+        # ── Fields (order preserved per spec) ─────────────────────────────
+        embed.add_field(name="__**About**__",       value=about_val,    inline=False)
+        embed.add_field(name="__**Description**__", value=desc_val,     inline=False)
+        embed.add_field(name="__**Features**__",    value=features_val, inline=False)
+        embed.add_field(name="__**Extras**__",      value=extras_val,   inline=False)
 
-        # Footer with requester and timestamp
-        footer_icon = (
-            ctx.author.display_avatar.url if ctx.author.display_avatar else None
-        )
+        # Members — 3-column inline grid
+        embed.add_field(name="__**Members**__", value=mem_col1,  inline=True)
+        embed.add_field(name="\u200b",          value=mem_col2,  inline=True)
+        embed.add_field(name="\u200b",          value=mem_col3,  inline=True)
+
+        embed.add_field(name="__**Channels**__",    value=channels_val, inline=False)
+        embed.add_field(name="__**Emoji Info**__",  value=emoji_val,    inline=False)
+
+        # Boost — 3-column inline grid
+        embed.add_field(name="__**Boost Status**__", value=boost_col1, inline=True)
+        embed.add_field(name="\u200b",               value=boost_col2, inline=True)
+        embed.add_field(name="\u200b",               value=boost_col3, inline=True)
+
+        embed.add_field(name="__**Server Roles**__", value=role_pills, inline=False)
+
+        # Footer
         embed.set_footer(
             text=f"Requested by {ctx.author.display_name}",
-            icon_url=footer_icon,
+            icon_url=ctx.author.display_avatar.url,
         )
         embed.timestamp = datetime.now(timezone.utc)
 
