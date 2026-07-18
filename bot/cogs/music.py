@@ -1,9 +1,34 @@
 from __future__ import annotations
 
+import re
+
 import discord
 import wavelink
 from discord import app_commands
 from discord.ext import commands
+
+# ---------------------------------------------------------------------------
+# URL detection patterns
+# ---------------------------------------------------------------------------
+
+# YouTube watch pages and youtu.be short links (with or without playlist param)
+_YT_RE = re.compile(
+    r"https?://(?:www\.)?(?:youtube\.com/(?:watch|playlist|shorts)\S*|youtu\.be/\S+)",
+    re.IGNORECASE,
+)
+
+# Spotify open links and spotify.link short URLs
+# Covers: track, album, playlist, episode (episode falls back gracefully)
+_SPOTIFY_RE = re.compile(
+    r"https?://(?:open\.spotify\.com/(?:track|album|playlist|episode)|spotify\.link)\S*",
+    re.IGNORECASE,
+)
+
+# Any other http/https URL (Bandcamp, SoundCloud direct link, radio streams…)
+_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+
+# Colour used for every play-related embed
+_PLAY_COLOR = 0xD1ABED
 
 
 class Music(commands.Cog):
@@ -150,17 +175,23 @@ class Music(commands.Cog):
         await ctx.send("👋 Disconnected and cleared the queue.")
 
     @commands.hybrid_command(
-        name="play", description="Play a track from SoundCloud (URL or search query)."
+        name="play",
+        description="Play a song — search by name or paste a YouTube / Spotify URL.",
     )
-    @app_commands.describe(query="SoundCloud URL or search terms")
+    @app_commands.describe(
+        query="Song name, YouTube URL, Spotify URL, or any direct audio link"
+    )
     async def play(self, ctx: commands.Context, *, query: str = "") -> None:
         await ctx.defer()
 
-        if not query.strip():
+        query = query.strip()
+
+        # ── No query → send usage guide ──────────────────────────────────
+        if not query:
             embed = discord.Embed(
                 title="🎵 Play Music",
                 description="Queue a song using its name or a direct URL.",
-                color=0xD1ABED,
+                color=_PLAY_COLOR,
             )
             embed.add_field(
                 name="Usage",
@@ -168,49 +199,128 @@ class Music(commands.Cog):
                 inline=False,
             )
             embed.add_field(
-                name="Example",
-                value="`?play Faded`\n`?play https://youtu.be/...`",
+                name="Examples",
+                value=(
+                    "`?play Faded`\n"
+                    "`?play https://youtu.be/60ItHLz5WEA`\n"
+                    "`?play https://open.spotify.com/track/...`"
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Supported Sources",
+                value="🎵 Song names · 📺 YouTube · 🎧 Spotify · 🔗 Direct links",
                 inline=False,
             )
             embed.set_footer(text="Tip: Song names and direct links are both supported.")
             await ctx.send(embed=embed, delete_after=5, ephemeral=True)
             return
 
+        # ── Join voice channel ────────────────────────────────────────────
         player = await self._get_player(ctx, join=True)
         if player is None:
             return
 
-        # Keep home channel up to date.
         player.home = ctx.channel  # type: ignore[attr-defined]
 
-        # SoundCloud search works from datacenter IPs; YouTube search returns
-        # empty. YouTube/SoundCloud direct URLs are auto-detected and bypass
-        # the search prefix.
-        tracks: wavelink.Search = await wavelink.Playable.search(
-            query, source=wavelink.TrackSource.SoundCloud
-        )
+        # ── Detect input type and choose search strategy ──────────────────
+        is_youtube = bool(_YT_RE.match(query))
+        is_spotify = bool(_SPOTIFY_RE.match(query))
+        is_url     = bool(_URL_RE.match(query))
 
-        if not tracks:
-            await ctx.send("❌ No results found.", ephemeral=True)
+        try:
+            if is_youtube or is_spotify:
+                # Pass the URL directly — the youtube-plugin resolves YouTube
+                # natively and resolves Spotify → YouTube automatically.
+                tracks: wavelink.Search = await wavelink.Playable.search(query)
+            elif is_url:
+                # Any other URL (SoundCloud link, Bandcamp, HTTP stream, etc.)
+                # Lavalink's http source will handle it.
+                tracks = await wavelink.Playable.search(query)
+            else:
+                # Plain text search — SoundCloud works reliably from
+                # datacenter IPs; YouTube text search is blocked by default.
+                tracks = await wavelink.Playable.search(
+                    query, source=wavelink.TrackSource.SoundCloud
+                )
+        except Exception as exc:
+            embed = discord.Embed(
+                title="⚠️ Could Not Load Track",
+                description=(
+                    "Something went wrong while fetching that track.\n"
+                    "Please double-check the link and try again."
+                ),
+                color=_PLAY_COLOR,
+            )
+            embed.add_field(
+                name="Reason", value=f"```{exc}```", inline=False
+            )
+            embed.set_footer(
+                text="Tip: Try searching by song name if the link isn't working."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
             return
 
+        # ── No results ────────────────────────────────────────────────────
+        if not tracks:
+            if is_spotify:
+                title = "❌ Spotify Link Could Not Be Resolved"
+                description = (
+                    "That Spotify link didn't return any playable tracks.\n"
+                    "The content may be unavailable in your region, or the link may be invalid.\n\n"
+                    "**Try searching by song name instead:**\n"
+                    "`?play Artist - Song Title`"
+                )
+            elif is_youtube:
+                title = "❌ YouTube Video Unavailable"
+                description = (
+                    "That YouTube link couldn't be loaded.\n"
+                    "The video may be private, age-restricted, or unavailable.\n\n"
+                    "**Try a different link or search by name:**\n"
+                    "`?play Song Title`"
+                )
+            elif is_url:
+                title = "❌ Link Could Not Be Played"
+                description = (
+                    "That URL didn't return any audio.\n"
+                    "Make sure it points to a supported source or a direct audio file."
+                )
+            else:
+                title = "❌ No Results Found"
+                description = (
+                    f"No tracks matched **{discord.utils.escape_markdown(query)}**.\n"
+                    "Try a different search term or paste a direct URL."
+                )
+            embed = discord.Embed(
+                title=title, description=description, color=_PLAY_COLOR
+            )
+            embed.set_footer(
+                text="Tip: Song names and direct links are both supported."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+            return
+
+        # ── Queue the result(s) ───────────────────────────────────────────
         if isinstance(tracks, wavelink.Playlist):
+            added = len(tracks.tracks)
             for track in tracks.tracks:
                 player.queue.put(track)
+            source_tag = "Spotify" if is_spotify else ("YouTube" if is_youtube else "")
+            label = f" ({source_tag})" if source_tag else ""
             msg = (
-                f"➕ Added playlist **{tracks.name}** "
-                f"({len(tracks.tracks)} tracks) to the queue."
+                f"➕ Added playlist **{discord.utils.escape_markdown(tracks.name)}**{label} "
+                f"— **{added}** track{'s' if added != 1 else ''} queued."
             )
         else:
             track: wavelink.Playable = tracks[0]
             player.queue.put(track)
             if player.playing:
                 msg = (
-                    f"➕ Added **{track.title}** to the queue "
-                    f"(position **#{len(player.queue)}**)."
+                    f"➕ Added **{discord.utils.escape_markdown(track.title)}** "
+                    f"to the queue (position **#{len(player.queue)}**)."
                 )
             else:
-                msg = f"🎵 Loading **{track.title}**…"
+                msg = f"🎵 Loading **{discord.utils.escape_markdown(track.title)}**…"
 
         if not player.playing:
             await player.play(player.queue.get(), populate=False)
