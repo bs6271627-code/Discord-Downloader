@@ -12,18 +12,57 @@ if not TOKEN:
 LAVALINK_URI = "http://localhost:2333"
 LAVALINK_PASSWORD = "youshallnotpass"
 
+# ── No Prefix System ────────────────────────────────────────────────────── #
+# These three user IDs permanently have no-prefix access and are never stored
+# in the JSON file — they are hardcoded here and in cogs/noprefix.py.
+_OWNER_IDS: frozenset[int] = frozenset({
+    1487483128309223614,
+    1332245879444340789,
+    1239442859103621243,
+})
+
+
+def _get_prefix(bot: "MusicBot", message: discord.Message) -> list[str]:
+    """
+    Return the list of valid prefixes for *message*.
+
+    • Bot owners and users granted No Prefix access receive ["?", ""]
+      so every message they send is treated as a potential command.
+    • Everyone else receives ["?"].
+    • Bot mentions (<@ID> / <@!ID>) are always accepted for all users.
+    """
+    has_no_prefix = (
+        message.author.id in _OWNER_IDS
+        or message.author.id in bot.no_prefix_users
+    )
+    prefixes = ["?", ""] if has_no_prefix else ["?"]
+
+    # Always include bot mention as a valid prefix
+    if bot.user:
+        uid = bot.user.id
+        prefixes = [f"<@{uid}> ", f"<@!{uid}> "] + prefixes
+
+    return prefixes
+
 
 class MusicBot(commands.Bot):
     def __init__(self) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
+        # no_prefix_users is populated from disk in setup_hook before cogs load
+        self.no_prefix_users: set[int] = set()
         super().__init__(
-            command_prefix=commands.when_mentioned_or("?"),
+            command_prefix=_get_prefix,
             help_command=None,  # disabled; custom one in cogs/help.py
             intents=intents,
         )
 
     async def setup_hook(self) -> None:
+        # Load persisted No Prefix users before any cog needs them
+        from cogs.noprefix import load_np_users
+        self.no_prefix_users = load_np_users()
+        print(f"[noprefix] Loaded {len(self.no_prefix_users)} persisted NP user(s).", flush=True)
+
         await self.load_extension("cogs.music")
         await self.load_extension("cogs.help")
         await self.load_extension("cogs.utility")
@@ -34,6 +73,7 @@ class MusicBot(commands.Bot):
         await self.load_extension("cogs.audio")
         await self.load_extension("cogs.premium")
         await self.load_extension("cogs.moderation")
+        await self.load_extension("cogs.noprefix")
         await self.tree.sync()
         print("Slash commands synced.", flush=True)
 

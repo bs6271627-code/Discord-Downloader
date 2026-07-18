@@ -167,6 +167,13 @@ CATEGORIES: list[tuple[str, str, str]] = [
         "`serverinfo` — Display server information (`?si`)\n"
         "`poll <question>` — Create a poll",
     ),
+    (
+        "noprefix",
+        "No Prefix",
+        "`np add <user>` — Grant a user No Prefix access *(Bot Owners only)*\n"
+        "`np remove <user>` — Revoke No Prefix access *(Bot Owners only)*\n"
+        "`np list` — List all users with No Prefix access *(Bot Owners only)*",
+    ),
 ]
 
 
