@@ -178,8 +178,7 @@ class Help(commands.Cog):
         # ── Build premium mention embed ──────────────────────────────────
         embed = discord.Embed(
             description=(
-                "Thank you for mentioning **Seraph**.\n\n"
-                "I'm a premium multi-purpose music bot built for a fast, smooth Discord experience. "
+                "Hi I'm seraph <3 multi-purpose music bot built for a fast, smooth experience. "
                 "Creators: <@1332245879444340789> & <@1487483128309223614>"
             ),
             color=MENTION_COLOR,
