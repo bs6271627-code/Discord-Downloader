@@ -153,8 +153,28 @@ class Music(commands.Cog):
         name="play", description="Play a track from SoundCloud (URL or search query)."
     )
     @app_commands.describe(query="SoundCloud URL or search terms")
-    async def play(self, ctx: commands.Context, *, query: str) -> None:
+    async def play(self, ctx: commands.Context, *, query: str = "") -> None:
         await ctx.defer()
+
+        if not query.strip():
+            embed = discord.Embed(
+                title="🎵 Play Music",
+                description="Queue a song using its name or a direct URL.",
+                color=0xD1ABED,
+            )
+            embed.add_field(
+                name="Usage",
+                value="`?play <song name or URL>`\n`/play <song name or URL>`",
+                inline=False,
+            )
+            embed.add_field(
+                name="Example",
+                value="`?play Faded`\n`?play https://youtu.be/...`",
+                inline=False,
+            )
+            embed.set_footer(text="Tip: Song names and direct links are both supported.")
+            await ctx.send(embed=embed, delete_after=5, ephemeral=True)
+            return
 
         player = await self._get_player(ctx, join=True)
         if player is None:
