@@ -162,7 +162,9 @@ CATEGORIES: list[tuple[str, str, str]] = [
         "`vcban @user(s)` — Voice ban one or more users\n"
         "`vcban remove @user` — Remove a voice ban\n"
         "`vcmute @user` — Server mute / unmute a member in voice\n"
-        "`vcdef @user` — Server deafen / undeafen a member in voice",
+        "`vcunmute @user` — Remove server mute from a member in voice\n"
+        "`vcdef @user` — Server deafen / undeafen a member in voice\n"
+        "`vcundef @user` — Remove server deafen from a member in voice",
     ),
     (
         "utility",

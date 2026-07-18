@@ -1244,6 +1244,85 @@ class Moderation(commands.Cog):
         await _resolve(ctx)
 
     # ------------------------------------------------------------------ #
+    #  vcunmute — explicitly remove server mute from a member
+    # ------------------------------------------------------------------ #
+
+    @commands.hybrid_command(
+        name="vcunmute",
+        aliases=["Vcunmute"],
+        description="Remove the server mute from the specified member in voice chat.",
+    )
+    @app_commands.describe(member="The member to server unmute.")
+    @app_commands.default_permissions(mute_members=True)
+    @commands.guild_only()
+    @commands.check(_author_can_mute)
+    async def vcunmute(self, ctx: commands.Context, member: discord.Member) -> None:
+        await _ack(ctx)
+
+        # Hierarchy check
+        h_err = _hierarchy_error(ctx, member)
+        if h_err:
+            await ctx.channel.send(h_err, delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+
+        # Target must be in a VC
+        if member.voice is None or member.voice.channel is None:
+            embed = discord.Embed(
+                description=f"❌ **{member}** is not connected to any voice channel.",
+                color=MOD_COLOR,
+            )
+            await ctx.channel.send(embed=embed, delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+
+        # Already not muted
+        if not member.voice.mute:
+            embed = discord.Embed(
+                description=f"❌ **{member}** is not server muted.",
+                color=MOD_COLOR,
+            )
+            await ctx.channel.send(embed=embed, delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+
+        # Bot permission check
+        bot_me: discord.Member = ctx.guild.me  # type: ignore[union-attr]
+        if not member.voice.channel.permissions_for(bot_me).mute_members:
+            await ctx.channel.send(  # type: ignore[union-attr]
+                "❌ I need **Mute Members** permission in that voice channel.",
+                delete_after=8,
+            )
+            await _resolve(ctx)
+            return
+
+        try:
+            await member.edit(
+                mute=False,
+                reason=f"VC Unmute by {ctx.author} ({ctx.author.id})",
+            )
+        except discord.Forbidden:
+            await ctx.channel.send("❌ I don't have permission to unmute that member.", delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+        except discord.HTTPException as exc:
+            print(f"[vcunmute] HTTPException: {exc}", flush=True)
+            await ctx.channel.send("❌ Something went wrong. Please try again.", delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+
+        embed = discord.Embed(
+            description=f"🔊 **{member}** has been server **unmuted**.",
+            color=VC_COLOR,
+        )
+        embed.set_footer(
+            text=f"Requested by {ctx.author}",
+            icon_url=ctx.author.display_avatar.url,
+        )
+        await ctx.channel.send(embed=embed)  # type: ignore[union-attr]
+        await _resolve(ctx)
+
+    # ------------------------------------------------------------------ #
     #  vcdef — server deafen / undeafen a member
     # ------------------------------------------------------------------ #
 
@@ -1308,6 +1387,86 @@ class Moderation(commands.Cog):
 
         embed = discord.Embed(
             description=f"{icon} **{member}** has been server **{action}**.",
+            color=VC_COLOR,
+        )
+        embed.set_footer(
+            text=f"Requested by {ctx.author}",
+            icon_url=ctx.author.display_avatar.url,
+        )
+        await ctx.channel.send(embed=embed)  # type: ignore[union-attr]
+        await _resolve(ctx)
+
+
+    # ------------------------------------------------------------------ #
+    #  vcundef — explicitly remove server deafen from a member
+    # ------------------------------------------------------------------ #
+
+    @commands.hybrid_command(
+        name="vcundef",
+        aliases=["Vcundef"],
+        description="Remove the server deafen from the specified member in voice chat.",
+    )
+    @app_commands.describe(member="The member to server undeafen.")
+    @app_commands.default_permissions(deafen_members=True)
+    @commands.guild_only()
+    @commands.check(_author_can_deafen)
+    async def vcundef(self, ctx: commands.Context, member: discord.Member) -> None:
+        await _ack(ctx)
+
+        # Hierarchy check
+        h_err = _hierarchy_error(ctx, member)
+        if h_err:
+            await ctx.channel.send(h_err, delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+
+        # Target must be in a VC
+        if member.voice is None or member.voice.channel is None:
+            embed = discord.Embed(
+                description=f"❌ **{member}** is not connected to any voice channel.",
+                color=MOD_COLOR,
+            )
+            await ctx.channel.send(embed=embed, delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+
+        # Already not deafened
+        if not member.voice.deaf:
+            embed = discord.Embed(
+                description=f"❌ **{member}** is not server deafened.",
+                color=MOD_COLOR,
+            )
+            await ctx.channel.send(embed=embed, delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+
+        # Bot permission check
+        bot_me: discord.Member = ctx.guild.me  # type: ignore[union-attr]
+        if not member.voice.channel.permissions_for(bot_me).deafen_members:
+            await ctx.channel.send(  # type: ignore[union-attr]
+                "❌ I need **Deafen Members** permission in that voice channel.",
+                delete_after=8,
+            )
+            await _resolve(ctx)
+            return
+
+        try:
+            await member.edit(
+                deafen=False,
+                reason=f"VC Undeafen by {ctx.author} ({ctx.author.id})",
+            )
+        except discord.Forbidden:
+            await ctx.channel.send("❌ I don't have permission to undeafen that member.", delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+        except discord.HTTPException as exc:
+            print(f"[vcundef] HTTPException: {exc}", flush=True)
+            await ctx.channel.send("❌ Something went wrong. Please try again.", delete_after=8)  # type: ignore[union-attr]
+            await _resolve(ctx)
+            return
+
+        embed = discord.Embed(
+            description=f"🔊 **{member}** has been server **undeafened**.",
             color=VC_COLOR,
         )
         embed.set_footer(
