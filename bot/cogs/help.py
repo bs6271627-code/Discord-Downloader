@@ -1,9 +1,33 @@
 from __future__ import annotations
 
+import time
+
 import discord
 from discord.ext import commands
 
 ACCENT = 0xC193CC  # #c193cc
+MENTION_COLOR = 0xC99FED  # #c99fed  — premium mention embed
+
+# Asset URLs used by the mention embed
+_MENTION_AUTHOR_ICON = (
+    "https://cdn.discordapp.com/attachments/1514986569789083810/"
+    "1527886411921887333/Crown_Purple.gif"
+    "?ex=6a5c4a9b&is=6a5af91b&hm=cc1a0634ff1e3dc055bb89cd9f6808e6649b50c506bc4504bfaffab95596ab21&"
+)
+_MENTION_BANNER = (
+    "https://cdn.discordapp.com/attachments/1514986569789083810/"
+    "1527893965888684152/New_Project_1999_2957357.gif"
+    "?ex=6a5c51a4&is=6a5b0024&hm=a20710eaf7e872489ba7a35ee51065c4eb7a122107d6018773671366b51d9a39&"
+)
+_MENTION_FOOTER_ICON = (
+    "https://cdn.discordapp.com/attachments/1514986569789083810/"
+    "1527887674072105031/purple_arrow.png"
+    "?ex=6a5c4bc8&is=6a5afa48&hm=b1cdb5daf52cb78c6ae83f568d3fde63084e04848beec520f507336d89ba49e5&"
+)
+
+# Per-user cooldown: user_id → unix timestamp of last mention reply
+_mention_cooldown: dict[int, float] = {}
+_MENTION_COOLDOWN_SECS = 10
 
 # Each tuple: (category header, commands text)
 CATEGORIES: list[tuple[str, str]] = [
@@ -125,14 +149,15 @@ class Help(commands.Cog):
         await ctx.send(embed=build_help_embed(self.bot))
 
     # ------------------------------------------------------------------ #
-    #  Bare bot-mention handler  (@Seraph  →  help embed)
+    #  Bare bot-mention handler  (@Seraph  →  premium mention embed)
     # ------------------------------------------------------------------ #
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """
         When someone mentions the bot with nothing else, respond with the
-        help embed — the same one produced by ?help / /help.
+        premium mention embed. Ignores bots and enforces a 10-second
+        per-user cooldown so the same user can't spam-trigger it.
         """
         if message.author.bot or self.bot.user is None:
             return
@@ -143,7 +168,32 @@ class Help(commands.Cog):
         if stripped not in (f"<@{uid}>", f"<@!{uid}>"):
             return
 
-        await message.channel.send(embed=build_help_embed(self.bot))
+        # ── Per-user cooldown ────────────────────────────────────────────
+        now = time.monotonic()
+        last = _mention_cooldown.get(message.author.id, 0.0)
+        if now - last < _MENTION_COOLDOWN_SECS:
+            return  # silently ignore — no error message to keep it clean
+        _mention_cooldown[message.author.id] = now
+
+        # ── Build premium mention embed ──────────────────────────────────
+        embed = discord.Embed(
+            description=(
+                "Hey there! Thanks for mentioning me.\n\n"
+                "### Creator\n"
+                "<@1239442859103621243>\n\n"
+                "　　　　　　　　　　✦\n\n"
+                "<@1332245879444340789>\n\n"
+                "These are my creators and developers behind **Seraph**. 💜\n\n"
+                "Need help?\n"
+                "Use `?help` or `/help` to explore all my commands."
+            ),
+            color=MENTION_COLOR,
+        )
+        embed.set_author(name="Seraph — Premium ✨", icon_url=_MENTION_AUTHOR_ICON)
+        embed.set_image(url=_MENTION_BANNER)
+        embed.set_footer(text="Thanks for using Seraph ✨", icon_url=_MENTION_FOOTER_ICON)
+
+        await message.channel.send(embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:
