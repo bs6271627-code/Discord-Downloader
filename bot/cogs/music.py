@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -185,83 +186,65 @@ def _spotify_type_id(url: str) -> tuple[str, str] | None:
     return (m.group(1), m.group(2)) if m else None
 
 
-async def _spotify_client_token(session: aiohttp.ClientSession) -> str | None:
-    """
-    Obtain a Spotify Client Credentials access token.
-
-    Requires the SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment
-    variables (set them as Replit Secrets).  Returns the token string, or
-    None when credentials are absent or the request fails.
-    """
-    client_id     = os.environ.get("SPOTIFY_CLIENT_ID")
-    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        return None
-    try:
-        async with session.post(
-            _SPOTIFY_TOKEN_URL,
-            data={"grant_type": "client_credentials"},
-            auth=aiohttp.BasicAuth(client_id, client_secret),
-            timeout=aiohttp.ClientTimeout(total=8),
-        ) as r:
-            if r.status == 200:
-                d = await r.json(content_type=None)
-                return d.get("access_token")
-    except Exception:
-        pass
-    return None
-
-
-async def _spotify_playlist_tracks(
+async def _spotify_playlist_tracks_embed(
     session: aiohttp.ClientSession,
     playlist_id: str,
-    token: str,
 ) -> list[tuple[str, str]]:
     """
-    Fetch every track from a Spotify playlist using the Web API (paginated).
+    Fetch tracks from a Spotify playlist by scraping the public embed page.
+
+    No Spotify API credentials or premium subscription required — the embed
+    page is publicly accessible and contains the full track list as an inline
+    JSON blob in the page's largest <script> tag.
 
     Returns a list of (track_name, primary_artist_name) tuples in playlist
-    order.  Local files, null track objects, and items with no name are
-    silently skipped — the caller counts those as unavailable.
+    order.  Unplayable tracks and non-track items are skipped.
+
+    Note: The embed page returns up to ~50 tracks per load.  Very long
+    playlists may be truncated to the first ~50 entries.
     """
+    url = f"https://open.spotify.com/embed/playlist/{playlist_id}"
+    try:
+        async with session.get(
+            url,
+            headers=_BROWSER_HEADERS,
+            timeout=aiohttp.ClientTimeout(total=12),
+        ) as r:
+            if r.status != 200:
+                return []
+            html = await r.text(errors="replace")
+    except Exception:
+        return []
+
+    # The embed page inlines the track list as a JSON blob in the largest
+    # <script> tag, starting with {"props":{"pageProps":{"state":...}}}.
+    scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.DOTALL)
+    inline = [s for s in scripts if len(s) > 100]
+    if not inline:
+        return []
+
+    blob = max(inline, key=len)
+    try:
+        data = json.loads(blob)
+        track_list: list[dict] = (
+            data["props"]["pageProps"]["state"]["data"]["entity"]["trackList"]
+        )
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return []
+
     tracks: list[tuple[str, str]] = []
-    url: str | None = (
-        f"{_SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks"
-    )
-    params: dict = {
-        "limit": 100,
-        "fields": "next,items(track(name,artists(name),is_local))",
-    }
-    headers = {"Authorization": f"Bearer {token}"}
-
-    while url:
-        try:
-            async with session.get(
-                url,
-                headers=headers,
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as r:
-                if r.status != 200:
-                    break
-                data = await r.json(content_type=None)
-        except Exception:
-            break
-
-        for item in data.get("items", []):
-            track = item.get("track")
-            if not track:
-                continue
-            if track.get("is_local"):
-                continue  # local files have no streamable source
-            name   = (track.get("name") or "").strip()
-            artists = track.get("artists") or []
-            artist  = (artists[0].get("name") or "").strip() if artists else ""
-            if name:
-                tracks.append((name, artist))
-
-        url    = data.get("next")  # full URL with pagination params; None on last page
-        params = {}                # params are already embedded in the next URL
+    for item in track_list:
+        if item.get("entityType") != "track":
+            continue
+        if not item.get("isPlayable", True):
+            continue
+        title = (item.get("title") or "").strip()
+        if not title:
+            continue
+        # subtitle is "Artist1,\xa0Artist2" — take the first artist only
+        subtitle = (item.get("subtitle") or "").replace("\xa0", " ").strip()
+        primary_artist = subtitle.split(",")[0].strip() if subtitle else ""
+        tracks.append((title, primary_artist))
 
     return tracks
 
@@ -778,33 +761,9 @@ class Music(commands.Cog):
                     msg = self._queue_msg(track, player, is_loading=not player.playing)
 
                 elif sp_type == "playlist":
-                    # ── Spotify playlist — fetch every track via Web API ──────
+                    # ── Spotify playlist — scrape public embed page ───────────
                     sp_name   = oembed.get("title", "Unknown Playlist")
                     sp_author = oembed.get("author_name", "")
-
-                    token = await _spotify_client_token(session)
-                    if not token:
-                        embed = discord.Embed(
-                            title="🎧 Spotify Playlist — Credentials Required",
-                            description=(
-                                f"**{discord.utils.escape_markdown(sp_name)}**"
-                                + (f" · *{discord.utils.escape_markdown(sp_author)}*" if sp_author else "")
-                                + "\n\n"
-                                "To queue Spotify playlists, add these two **Replit Secrets**:\n"
-                                "• `SPOTIFY_CLIENT_ID`\n"
-                                "• `SPOTIFY_CLIENT_SECRET`\n\n"
-                                "Get them free at [Spotify Developer Dashboard]"
-                                "(https://developer.spotify.com/dashboard) → "
-                                "create an app → copy **Client ID** and **Client secret**.\n\n"
-                                "**In the meantime:**\n"
-                                "• Paste a single Spotify **track** URL — those work without credentials!\n"
-                                f"• Or search by name: `?play {sp_author} - Song Title`"
-                            ),
-                            color=_PLAY_COLOR,
-                        )
-                        embed.set_footer(text="Spotify track URLs work without any credentials.")
-                        await ctx.send(embed=embed, ephemeral=True)
-                        return
 
                     sp_id = sp_info[1] if sp_info else None
                     if not sp_id:
@@ -822,12 +781,12 @@ class Music(commands.Cog):
                         f"⏳ Loading **{discord.utils.escape_markdown(sp_name)}** — fetching tracks…"
                     )
 
-                    sp_tracks = await _spotify_playlist_tracks(session, sp_id, token)
+                    sp_tracks = await _spotify_playlist_tracks_embed(session, sp_id)
                     if not sp_tracks:
                         await ctx.send(
                             embed=_error_embed(
                                 "❌ Spotify Playlist Empty or Unavailable",
-                                "The playlist appears to be empty, private, or couldn't be read.\n"
+                                "The playlist appears to be empty, private, or couldn't be loaded.\n"
                                 "Make sure the playlist is set to **Public** on Spotify.",
                             ),
                             ephemeral=True,
