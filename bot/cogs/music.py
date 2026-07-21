@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import xml.etree.ElementTree as ET
 from urllib.parse import parse_qs, quote, urlparse
@@ -42,6 +43,13 @@ _BROWSER_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+# ---------------------------------------------------------------------------
+# Spotify Web API constants
+# ---------------------------------------------------------------------------
+
+_SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
+_SPOTIFY_API_BASE  = "https://api.spotify.com/v1"
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +185,87 @@ def _spotify_type_id(url: str) -> tuple[str, str] | None:
     return (m.group(1), m.group(2)) if m else None
 
 
+async def _spotify_client_token(session: aiohttp.ClientSession) -> str | None:
+    """
+    Obtain a Spotify Client Credentials access token.
+
+    Requires the SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment
+    variables (set them as Replit Secrets).  Returns the token string, or
+    None when credentials are absent or the request fails.
+    """
+    client_id     = os.environ.get("SPOTIFY_CLIENT_ID")
+    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return None
+    try:
+        async with session.post(
+            _SPOTIFY_TOKEN_URL,
+            data={"grant_type": "client_credentials"},
+            auth=aiohttp.BasicAuth(client_id, client_secret),
+            timeout=aiohttp.ClientTimeout(total=8),
+        ) as r:
+            if r.status == 200:
+                d = await r.json(content_type=None)
+                return d.get("access_token")
+    except Exception:
+        pass
+    return None
+
+
+async def _spotify_playlist_tracks(
+    session: aiohttp.ClientSession,
+    playlist_id: str,
+    token: str,
+) -> list[tuple[str, str]]:
+    """
+    Fetch every track from a Spotify playlist using the Web API (paginated).
+
+    Returns a list of (track_name, primary_artist_name) tuples in playlist
+    order.  Local files, null track objects, and items with no name are
+    silently skipped — the caller counts those as unavailable.
+    """
+    tracks: list[tuple[str, str]] = []
+    url: str | None = (
+        f"{_SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks"
+    )
+    params: dict = {
+        "limit": 100,
+        "fields": "next,items(track(name,artists(name),is_local))",
+    }
+    headers = {"Authorization": f"Bearer {token}"}
+
+    while url:
+        try:
+            async with session.get(
+                url,
+                headers=headers,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as r:
+                if r.status != 200:
+                    break
+                data = await r.json(content_type=None)
+        except Exception:
+            break
+
+        for item in data.get("items", []):
+            track = item.get("track")
+            if not track:
+                continue
+            if track.get("is_local"):
+                continue  # local files have no streamable source
+            name   = (track.get("name") or "").strip()
+            artists = track.get("artists") or []
+            artist  = (artists[0].get("name") or "").strip() if artists else ""
+            if name:
+                tracks.append((name, artist))
+
+        url    = data.get("next")  # full URL with pagination params; None on last page
+        params = {}                # params are already embedded in the next URL
+
+    return tracks
+
+
 async def _sc_search(query: str) -> wavelink.Playable | None:
     """Search SoundCloud and return the best single result, or None."""
     try:
@@ -201,6 +290,48 @@ async def _sc_search_many(queries: list[str]) -> list[wavelink.Playable]:
 
     results = await asyncio.gather(*[_one(q) for q in queries], return_exceptions=True)
     return [r for r in results if isinstance(r, wavelink.Playable)]
+
+
+async def _ytm_search(query: str) -> wavelink.Playable | None:
+    """
+    Search YouTube Music for the best single result.
+    Falls back to SoundCloud if YouTube Music returns nothing.
+    """
+    try:
+        results = await wavelink.Playable.search(
+            query, source=wavelink.TrackSource.YouTubeMusic
+        )
+        if results:
+            return results[0]
+    except Exception:
+        pass
+    return await _sc_search(query)
+
+
+async def _ytm_search_many(
+    queries: list[str],
+) -> tuple[list[wavelink.Playable], int]:
+    """
+    Search YouTube Music (SoundCloud fallback) for every query concurrently
+    (max 5 parallel), preserving input order.
+
+    Returns (found_tracks, skipped_count).
+    """
+    sem = asyncio.Semaphore(5)
+
+    async def _one(q: str) -> wavelink.Playable | None:
+        async with sem:
+            return await _ytm_search(q)
+
+    raw = await asyncio.gather(*[_one(q) for q in queries], return_exceptions=True)
+    found: list[wavelink.Playable] = []
+    skipped = 0
+    for r in raw:
+        if isinstance(r, wavelink.Playable):
+            found.append(r)
+        else:
+            skipped += 1
+    return found, skipped
 
 
 def _error_embed(title: str, description: str, footer: str = "") -> discord.Embed:
@@ -646,9 +777,97 @@ class Music(commands.Cog):
                     player.queue.put(track)
                     msg = self._queue_msg(track, player, is_loading=not player.playing)
 
-                elif sp_type in ("album", "playlist"):
-                    # ── Spotify album / playlist — no free track listing API ──
-                    sp_label = sp_type.capitalize()
+                elif sp_type == "playlist":
+                    # ── Spotify playlist — fetch every track via Web API ──────
+                    sp_name   = oembed.get("title", "Unknown Playlist")
+                    sp_author = oembed.get("author_name", "")
+
+                    token = await _spotify_client_token(session)
+                    if not token:
+                        embed = discord.Embed(
+                            title="🎧 Spotify Playlist — Credentials Required",
+                            description=(
+                                f"**{discord.utils.escape_markdown(sp_name)}**"
+                                + (f" · *{discord.utils.escape_markdown(sp_author)}*" if sp_author else "")
+                                + "\n\n"
+                                "To queue Spotify playlists, add these two **Replit Secrets**:\n"
+                                "• `SPOTIFY_CLIENT_ID`\n"
+                                "• `SPOTIFY_CLIENT_SECRET`\n\n"
+                                "Get them free at [Spotify Developer Dashboard]"
+                                "(https://developer.spotify.com/dashboard) → "
+                                "create an app → copy **Client ID** and **Client secret**.\n\n"
+                                "**In the meantime:**\n"
+                                "• Paste a single Spotify **track** URL — those work without credentials!\n"
+                                f"• Or search by name: `?play {sp_author} - Song Title`"
+                            ),
+                            color=_PLAY_COLOR,
+                        )
+                        embed.set_footer(text="Spotify track URLs work without any credentials.")
+                        await ctx.send(embed=embed, ephemeral=True)
+                        return
+
+                    sp_id = sp_info[1] if sp_info else None
+                    if not sp_id:
+                        await ctx.send(
+                            embed=_error_embed(
+                                "❌ Invalid Spotify Playlist URL",
+                                "Couldn't extract the playlist ID from that URL.",
+                            ),
+                            ephemeral=True,
+                        )
+                        return
+
+                    # Notify the user we're loading (playlists can be large)
+                    await ctx.send(
+                        f"⏳ Loading **{discord.utils.escape_markdown(sp_name)}** — fetching tracks…"
+                    )
+
+                    sp_tracks = await _spotify_playlist_tracks(session, sp_id, token)
+                    if not sp_tracks:
+                        await ctx.send(
+                            embed=_error_embed(
+                                "❌ Spotify Playlist Empty or Unavailable",
+                                "The playlist appears to be empty, private, or couldn't be read.\n"
+                                "Make sure the playlist is set to **Public** on Spotify.",
+                            ),
+                            ephemeral=True,
+                        )
+                        return
+
+                    # Build search queries: "Track Name Artist"
+                    queries = [
+                        f"{name} {artist}".strip() if artist else name
+                        for name, artist in sp_tracks
+                    ]
+
+                    found, skipped = await _ytm_search_many(queries)
+                    if not found:
+                        await ctx.send(
+                            embed=_error_embed(
+                                "❌ No Matches Found",
+                                f"Fetched **{len(sp_tracks)}** tracks from the playlist but "
+                                "couldn't match any on YouTube Music or SoundCloud.\n"
+                                "Try searching for individual songs by name.",
+                            ),
+                            ephemeral=True,
+                        )
+                        return
+
+                    for t in found:
+                        player.queue.put(t)
+
+                    skipped_note = (
+                        f" ({skipped} track{'s' if skipped != 1 else ''} unavailable and skipped)"
+                        if skipped else ""
+                    )
+                    msg = (
+                        f"➕ Queued **{len(found)}** track{'s' if len(found) != 1 else ''} "
+                        f"from **{discord.utils.escape_markdown(sp_name)}**{skipped_note}."
+                    )
+
+                elif sp_type == "album":
+                    # ── Spotify album — no free track listing API ─────────────
+                    sp_label = "Album"
                     name   = oembed.get("title", "Unknown")
                     artist = oembed.get("author_name", "")
 
@@ -658,7 +877,7 @@ class Music(commands.Cog):
                             f"**{discord.utils.escape_markdown(name)}**"
                             + (f" · *{discord.utils.escape_markdown(artist)}*" if artist else "")
                             + "\n\n"
-                            "Full track listing for Spotify albums and playlists requires "
+                            "Full track listing for Spotify albums requires "
                             "Spotify API credentials, which aren't configured yet.\n\n"
                             "**What you can do right now:**\n"
                             f"• Search for individual tracks: `?play {artist} - Song Title`\n"
@@ -667,7 +886,7 @@ class Music(commands.Cog):
                         color=_PLAY_COLOR,
                     )
                     embed.set_footer(
-                        text="Tip: Spotify track URLs → full metadata → best SoundCloud match."
+                        text="Tip: Spotify track URLs → full metadata → best match."
                     )
                     await ctx.send(embed=embed, ephemeral=True)
                     return
