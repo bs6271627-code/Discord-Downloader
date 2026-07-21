@@ -30,6 +30,13 @@ To install / sync Python dependencies: `uv sync` (creates `.pythonlibs/` venv fr
 
 - `TOKEN` — Discord bot token (set as a Replit Secret)
 
+## Setup status
+
+- ✅ Python dependencies installed via `uv sync` (see `pyproject.toml` + `uv.lock`)
+- ✅ `TOKEN` secret configured as a Replit Secret
+- ✅ Lavalink workflow starts successfully on port 2333
+- ✅ Discord Music Bot connects to Lavalink and syncs slash commands on startup
+
 ## User preferences
 
 _Populate as you build — explicit user instructions worth remembering across sessions._
