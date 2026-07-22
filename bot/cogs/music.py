@@ -36,10 +36,13 @@ _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
 # Words that indicate a non-original upload (remix, cover, live, etc.).
 # Used by _best_match() to down-score results that weren't asked for.
+# NOTE: only penalised when they appear in the *result* but NOT in the query,
+# so searching "nightcore mix" still works as expected.
 _JUNK_TAGS = re.compile(
     r"\b(remix|cover|live|slowed|reverb|sped[ -]up|nightcore|mashup|"
     r"acoustic|instrumental|karaoke|extended|bass[ -]boost(?:ed)?|"
-    r"lo[ -]?fi|lofi|edit|vip|flip|version)\b",
+    r"lo[ -]?fi|lofi|edit|vip|flip|version|tribute|parody|"
+    r"fan[ -]?made|reaction|pitch[ -]?shift(?:ed)?)\b",
     re.IGNORECASE,
 )
 
@@ -64,16 +67,23 @@ def _best_match(
     query: str,
     results: list[wavelink.Playable],
     *,
-    min_duration_ms: int = 60_000,
+    min_duration_ms: int = 45_000,
 ) -> wavelink.Playable | None:
     """
     Pick the most accurate result from a search list.
 
-    Scoring per candidate:
+    Scoring per candidate (evaluated against the top 10 results):
       +3.0 × difflib title-similarity ratio (0–1 scale)
-      -1.5  per junk tag (remix/cover/live/slowed/reverb/…) found in the
-             result title but NOT in the original query
-      -3.0  if the track is shorter than min_duration_ms (likely a preview)
+      +1.5  "official audio" in title  → exact studio release
+      +0.75 author/channel contains "topic" or "official"
+             (YouTube Music auto-generated "Artist – Topic" channels are
+             always the original, unmodified recording)
+      +0.5  "official" elsewhere in title (music video, official upload)
+      +0.5  author/channel contains "vevo" (major-label official channel)
+      -2.0  per unexpected junk tag (remix / cover / live / slowed / reverb /
+             nightcore / bass boost / fan made / …) found in the result title
+             but NOT in the original query
+      -3.0  track shorter than min_duration_ms (30 s SoundCloud preview)
       -0.05 × position (slight preference for higher-ranked results)
 
     Falls back to results[0] on a tie so the search engine's own ranking
@@ -90,16 +100,27 @@ def _best_match(
 
     for i, track in enumerate(results):
         title_lower = track.title.lower()
+        author_lower = (track.author or "").lower()
 
         # Title similarity
         score = difflib.SequenceMatcher(None, query_lower, title_lower).ratio() * 3.0
 
-        # Penalise junk tags that appear in the result but weren't requested
+        # Official / authoritative source boosts
+        if "official audio" in title_lower:
+            score += 1.5
+        elif "official" in title_lower:
+            score += 0.5
+        if "topic" in author_lower or "official" in author_lower:
+            score += 0.75
+        if "vevo" in author_lower:
+            score += 0.5
+
+        # Penalise junk tags in result that weren't in the query
         result_junk: set[str] = {j.lower() for j in _JUNK_TAGS.findall(title_lower)}
         unexpected_junk = result_junk - query_junk
-        score -= len(unexpected_junk) * 1.5
+        score -= len(unexpected_junk) * 2.0
 
-        # Penalise very short tracks (previews / clips)
+        # Penalise very short tracks (30 s SoundCloud previews / clips)
         if track.length and track.length < min_duration_ms:
             score -= 3.0
 
@@ -317,14 +338,28 @@ async def _spotify_playlist_tracks_embed(
 
 
 async def _sc_search(query: str) -> wavelink.Playable | None:
-    """Search SoundCloud and return the best-matched result, or None."""
+    """
+    Search SoundCloud and return the best-matched result, or None.
+    Never returns 30-second previews (min_duration_ms=45 000 in _best_match).
+    """
     try:
         results: wavelink.Search = await wavelink.Playable.search(
             query, source=wavelink.TrackSource.SoundCloud
         )
-        return _best_match(query, list(results)[:5]) if results else None
-    except Exception:
-        return None
+        if results:
+            track = _best_match(query, list(results))
+            if track:
+                print(
+                    f"[sc_search] query={query!r}"
+                    f" → selected={track.title!r}"
+                    f" | dur={track.length and track.length // 1000}s"
+                    f" | uri={track.uri!r}",
+                    flush=True,
+                )
+            return track
+    except Exception as exc:
+        print(f"[sc_search] error query={query!r}: {exc}", flush=True)
+    return None
 
 
 async def _sc_search_many(queries: list[str]) -> list[wavelink.Playable]:
@@ -345,16 +380,35 @@ async def _sc_search_many(queries: list[str]) -> list[wavelink.Playable]:
 async def _ytm_search(query: str) -> wavelink.Playable | None:
     """
     Search YouTube Music for the best-matched result.
-    Falls back to SoundCloud if YouTube Music returns nothing.
+
+    Source priority:
+      1. YouTube Music (ytmsearch:) — richer music catalogue, better artist/
+         album metadata, Official Topic channels score well in _best_match.
+      2. SoundCloud — reliable fallback when YTM returns nothing or errors.
+
+    Never returns SoundCloud 30-second previews (min_duration_ms filter).
     """
     try:
         results = await wavelink.Playable.search(
             query, source=wavelink.TrackSource.YouTubeMusic
         )
         if results:
-            return _best_match(query, list(results)[:5])
-    except Exception:
-        pass
+            track = _best_match(query, list(results))
+            if track:
+                print(
+                    f"[ytm_search] query={query!r}"
+                    f" → selected={track.title!r}"
+                    f" | source=ytmusic"
+                    f" | dur={track.length and track.length // 1000}s"
+                    f" | uri={track.uri!r}",
+                    flush=True,
+                )
+                return track
+    except Exception as exc:
+        print(f"[ytm_search] YTM error query={query!r}: {exc}", flush=True)
+
+    # Fallback to SoundCloud
+    print(f"[ytm_search] query={query!r} → YTM empty/failed, trying SoundCloud", flush=True)
     return await _sc_search(query)
 
 
@@ -404,12 +458,19 @@ class Music(commands.Cog):
     implementation — no logic is duplicated.
 
     Audio source routing (YouTube datacenter IPs are blocked):
-      • YouTube video  → fetch og:title from page → SoundCloud search
-      • YouTube playlist → public Atom/RSS feed → SoundCloud search per track
-      • Spotify track  → public oEmbed API → SoundCloud search (title + artist)
-      • Spotify album/playlist → oEmbed name + helpful limitation message
-      • Other URL      → pass to Lavalink http source directly
-      • Text query     → SoundCloud search (fastest, most reliable)
+      • YouTube video    → fetch title via oEmbed → YouTube Music search
+                           (SoundCloud fallback)
+      • YouTube playlist → public Atom/RSS feed → YouTube Music search per track
+                           (SoundCloud fallback per track)
+      • Spotify track    → public oEmbed API → YouTube Music search
+                           (SoundCloud fallback)
+      • Spotify playlist → public embed page scrape → YouTube Music search
+                           (SoundCloud fallback per track)
+      • Other URL        → pass to Lavalink http source directly
+      • Text query       → YouTube Music search (SoundCloud fallback)
+
+    Playback failures are automatically retried on an alternative source before
+    the track is skipped (see _do_fallback_retry).
     """
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -473,11 +534,14 @@ class Music(commands.Cog):
     ) -> None:
         """
         Send a "Queue Ended" embed exactly once when playback genuinely
-        exhausts the queue.
+        exhausts the queue with a clean finish.
 
         Guards:
-        • reason must be "finished" — skips ("replaced") and manual stops
-          ("stopped") are excluded.
+        • reason must be "finished" — skips ("replaced"), manual stops
+          ("stopped"), and load failures ("loadFailed") are excluded.
+          loadFailed is handled by on_wavelink_track_exception which spawns
+          _do_fallback_retry; that method sends "Queue Ended" if the retry
+          also fails, preventing a false "Queue Ended" before the retry plays.
         • AutoPlayMode.enabled (recommendation mode) will add more tracks,
           so we stay silent.
         • 24/7 mode keeps the player alive intentionally — stay silent.
@@ -495,11 +559,10 @@ class Music(commands.Cog):
             flush=True,
         )
 
-        # Only fire the "Queue Ended" notification for natural completion or
-        # load failures — skips ("replaced") and manual stops ("stopped") are
-        # excluded.  "loadFailed" must be included so the notification fires
-        # when the last track in the queue fails to load.
-        if payload.reason not in ("finished", "loadFailed"):
+        # Only fire the "Queue Ended" notification for natural completion.
+        # "loadFailed" is intentionally excluded — _do_fallback_retry handles
+        # that case and sends its own "Queue Ended" only when all sources fail.
+        if payload.reason != "finished":
             return
 
         player: wavelink.Player | None = payload.player
@@ -546,12 +609,24 @@ class Music(commands.Cog):
     async def on_wavelink_track_exception(
         self, payload: wavelink.TrackExceptionEventPayload
     ) -> None:
+        """
+        Handle a Lavalink TrackExceptionEvent.
+
+        Logs the failure with full detail, notifies the channel, then spawns
+        _do_fallback_retry as a background task.  The retry searches for the
+        same song on an alternative source (YouTube Music ↔ SoundCloud) and
+        plays it without interrupting the rest of the queue.
+        """
         player: wavelink.Player = payload.player
+        track: wavelink.Playable = payload.track
         exc = payload.exception
+        msg_str   = exc.get("message", "")
+        cause_str = exc.get("cause", "")
         print(
-            f"[track_exception] title={payload.track.title!r}"
-            f" | message={exc.get('message', '')!r}"
-            f" | cause={exc.get('cause', '')!r}"
+            f"[track_exception] title={track.title!r}"
+            f" | source={track.source}"
+            f" | message={msg_str!r}"
+            f" | cause={cause_str!r}"
             f" | severity={exc.get('severity', '')!r}"
             f" | guild={getattr(getattr(player, 'guild', None), 'id', '?')}",
             flush=True,
@@ -559,9 +634,15 @@ class Music(commands.Cog):
         channel: discord.TextChannel | None = getattr(player, "home", None)
         if channel:
             await channel.send(
-                f"⚠️ Playback error for **{discord.utils.escape_markdown(payload.track.title)}**: "
-                f"{exc.get('message', 'unknown error')}",
+                f"⚠️ **{discord.utils.escape_markdown(track.title)}** failed "
+                f"({msg_str or 'playback error'}) — searching fallback source…"
             )
+        # Spawn fallback retry as a background task so we don't block the
+        # event loop while doing network searches.
+        asyncio.create_task(
+            self._do_fallback_retry(player, track),
+            name=f"retry:{getattr(player.guild, 'id', '?')}:{track.title[:40]}",
+        )
 
     @commands.Cog.listener()
     async def on_wavelink_track_stuck(
@@ -598,6 +679,112 @@ class Music(commands.Cog):
         if getattr(player, "twentyfour_seven", False):
             return
         await player.disconnect()
+
+    # ------------------------------------------------------------------ #
+    #  Automatic fallback retry
+    # ------------------------------------------------------------------ #
+
+    async def _do_fallback_retry(
+        self, player: wavelink.Player, failed_track: wavelink.Playable
+    ) -> None:
+        """
+        Fire-and-forget task spawned by on_wavelink_track_exception.
+
+        Waits for Lavalink to finish processing the TrackEnd event, then
+        searches for the same song on an alternative source:
+          • SoundCloud track failed  → retry on YouTube Music
+          • YouTube / YTM track failed → retry on SoundCloud
+
+        On success, either plays the fallback directly (if the player became
+        idle) or inserts it at position 0 of the queue (if another track is
+        already playing, so it plays next).
+
+        Each (guild, title) pair is retried at most once to prevent loops.
+        If the retry also fails, sends "Queue Ended" when the player is idle.
+        """
+        # Give wavelink/Lavalink time to fire TrackEnd and advance the queue.
+        await asyncio.sleep(1.2)
+
+        if not player.channel:
+            return  # Bot was disconnected while we waited
+
+        if not hasattr(player, "_exception_retried"):
+            player._exception_retried: set[str] = set()  # type: ignore[attr-defined]
+
+        guild_id = getattr(player.guild, "id", "?")
+        retry_key = f"{guild_id}:{failed_track.title}"
+
+        if retry_key in player._exception_retried:
+            # Already retried this title in this session — do not loop.
+            print(
+                f"[retry] Already retried {failed_track.title!r} in guild {guild_id}, skipping.",
+                flush=True,
+            )
+            return
+
+        player._exception_retried.add(retry_key)
+
+        search_q = (
+            f"{failed_track.title} {failed_track.author}".strip()
+            if failed_track.author
+            else failed_track.title
+        )
+
+        fallback: wavelink.Playable | None = None
+        fallback_src = ""
+
+        if failed_track.source == "soundcloud":
+            # SoundCloud failed → try YouTube Music (with its own SC fallback)
+            fallback = await _ytm_search(search_q)
+            fallback_src = "YouTube Music"
+        else:
+            # YouTube / YouTube Music failed → try SoundCloud
+            fallback = await _sc_search(search_q)
+            fallback_src = "SoundCloud"
+
+        channel: discord.TextChannel | None = getattr(player, "home", None)
+
+        if fallback is None:
+            print(
+                f"[retry] All sources failed for {failed_track.title!r} "
+                f"(guild={guild_id})",
+                flush=True,
+            )
+            # Retry exhausted — send "Queue Ended" only if nothing else is playing.
+            if not player.playing and player.queue.is_empty:
+                if channel:
+                    embed = discord.Embed(
+                        title="🎵 Queue Ended",
+                        description=(
+                            "All tracks have finished or failed to play.\n\n"
+                            "Use `?play <song>` or `/play <song>` to start again."
+                        ),
+                        color=_PLAY_COLOR,
+                    )
+                    embed.set_footer(text="Thanks for listening! ✨")
+                    await channel.send(embed=embed)
+            return
+
+        print(
+            f"[retry] {failed_track.title!r} → {fallback_src}: {fallback.title!r} "
+            f"| dur={fallback.length and fallback.length // 1000}s"
+            f" | uri={fallback.uri!r}"
+            f" | guild={guild_id}",
+            flush=True,
+        )
+
+        if not player.playing and not player.paused:
+            # Player became idle (failed track was last) — play fallback now.
+            await player.play(fallback, populate=False)
+        else:
+            # Another track is already playing or queued — insert fallback next.
+            player.queue.put_at(0, fallback)
+
+        if channel:
+            await channel.send(
+                f"🔄 **{discord.utils.escape_markdown(failed_track.title)}** "
+                f"retried via {fallback_src}."
+            )
 
     # ------------------------------------------------------------------ #
     #  Internal helpers
@@ -772,8 +959,8 @@ class Music(commands.Cog):
                         )
                         return
 
-                    # Prefer YouTube Music (better artist/track data), fall back
-                    # to SoundCloud inside _ytm_search for anything YTM misses.
+                    # YouTube Music first (better metadata), SoundCloud fallback
+                    # inside _ytm_search for anything YTM misses.
                     yt_found, yt_skipped = await _ytm_search_many(titles)
                     if not yt_found:
                         await ctx.send(
@@ -809,26 +996,29 @@ class Music(commands.Cog):
                                 "Couldn't retrieve the video title.\n"
                                 "The video may be private, age-restricted, or the link is invalid.\n\n"
                                 "**Try searching by name:**\n`?play Artist - Song Title`",
-                                "Tip: SoundCloud search works with any song name.",
+                                "Tip: YouTube Music search works with any song name.",
                             ),
                             ephemeral=True,
                         )
                         return
 
                     yt_title, yt_author = result
-                    # If the channel name isn't already in the title (e.g. "Artist - Song"),
-                    # append it so SoundCloud gets a more targeted query.
+                    # Include the channel name in the query if it isn't already
+                    # in the title (e.g. "Artist - Song"), so the search has the
+                    # artist name to match against.
                     if yt_author and yt_author.lower() not in yt_title.lower():
                         search_q = f"{yt_title} {yt_author}"
                     else:
                         search_q = yt_title
 
-                    track = await _sc_search(search_q)
+                    # YouTube Music first for best version match, SC fallback.
+                    track = await _ytm_search(search_q)
                     if track is None:
                         await ctx.send(
                             embed=_error_embed(
-                                "❌ No SoundCloud Match",
-                                f"Couldn't match **{discord.utils.escape_markdown(yt_title)}** on SoundCloud.\n"
+                                "❌ No Match Found",
+                                f"Couldn't match **{discord.utils.escape_markdown(yt_title)}** "
+                                f"on YouTube Music or SoundCloud.\n"
                                 "Try a slightly different search term.",
                                 "Tip: Remove featured artists or parenthetical info for better matches.",
                             ),
@@ -836,6 +1026,11 @@ class Music(commands.Cog):
                         )
                         return
 
+                    print(
+                        f"[play:yt_video] oembed={yt_title!r} → matched={track.title!r}"
+                        f" | source={track.source} | uri={track.uri!r}",
+                        flush=True,
+                    )
                     player.queue.put(track)
                     msg = self._queue_msg(track, player, is_loading=not player.playing)
 
@@ -863,9 +1058,9 @@ class Music(commands.Cog):
                 if sp_type == "track":
                     # ── Spotify single track ──────────────────────────────
                     # oEmbed returns both "title" (track name) and
-                    # "author_name" (artist).  Include the artist so the
-                    # SoundCloud search can distinguish e.g. "Blinding Lights
-                    # The Weeknd" from a cover or remix.
+                    # "author_name" (artist).  Always include the artist in
+                    # the search so we never return a cover instead of the
+                    # original.
                     sp_title  = (oembed.get("title") or "").strip()
                     sp_author = (oembed.get("author_name") or "").strip()
                     if not sp_title:
@@ -879,16 +1074,18 @@ class Music(commands.Cog):
                         )
                         return
 
-                    # Build a richer query: "Track Title Artist"
+                    # "Track Title Artist" — always include artist to avoid covers
                     sp_search_q = f"{sp_title} {sp_author}".strip() if sp_author else sp_title
-                    track = await _sc_search(sp_search_q)
+
+                    # YouTube Music first for exact version; SC fallback inside.
+                    track = await _ytm_search(sp_search_q)
 
                     if track is None:
                         await ctx.send(
                             embed=_error_embed(
-                                "❌ No SoundCloud Match",
+                                "❌ No Match Found",
                                 f"Couldn't match **{discord.utils.escape_markdown(sp_title)}** "
-                                f"on SoundCloud.\n"
+                                f"on YouTube Music or SoundCloud.\n"
                                 "Try searching by song name directly.",
                                 "Tip: Remove remix/version info for broader matches.",
                             ),
@@ -896,6 +1093,11 @@ class Music(commands.Cog):
                         )
                         return
 
+                    print(
+                        f"[play:spotify_track] spotify={sp_title!r} → matched={track.title!r}"
+                        f" | source={track.source} | uri={track.uri!r}",
+                        flush=True,
+                    )
                     player.queue.put(track)
                     msg = self._queue_msg(track, player, is_loading=not player.playing)
 
@@ -932,7 +1134,8 @@ class Music(commands.Cog):
                         )
                         return
 
-                    # Build search queries: "Track Name Artist"
+                    # Build search queries: always "Track Name Primary Artist"
+                    # so we never get a cover instead of the original recording.
                     queries = [
                         f"{name} {artist}".strip() if artist else name
                         for name, artist in sp_tracks
@@ -1028,12 +1231,12 @@ class Music(commands.Cog):
                     player.queue.put(track)
                     msg = self._queue_msg(track, player, is_loading=not player.playing)
 
-            # ── Plain text search → SoundCloud ────────────────────────────
+            # ── Plain text search → YouTube Music → SoundCloud ────────────
             else:
-                results = await wavelink.Playable.search(
-                    query, source=wavelink.TrackSource.SoundCloud
-                )
-                if not results:
+                # Use _ytm_search so we try YouTube Music (better metadata and
+                # version matching) before falling back to SoundCloud.
+                track = await _ytm_search(query)
+                if track is None:
                     await ctx.send(
                         embed=_error_embed(
                             "❌ No Results Found",
@@ -1045,7 +1248,13 @@ class Music(commands.Cog):
                     )
                     return
 
-                track = _best_match(query, list(results)[:5]) or results[0]
+                print(
+                    f"[play:search] query={query!r}"
+                    f" → matched={track.title!r}"
+                    f" | source={track.source}"
+                    f" | uri={track.uri!r}",
+                    flush=True,
+                )
                 player.queue.put(track)
                 msg = self._queue_msg(track, player, is_loading=not player.playing)
 

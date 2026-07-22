@@ -28,7 +28,9 @@ lavalink:
       rotation: true
       channelMix: true
       lowPass: true
-    bufferDurationMs: 400
+    # 3 s buffer prevents mid-song drops on any momentary network hiccup.
+    # 400 ms (the previous value) was far too short for a cloud/datacenter host.
+    bufferDurationMs: 3000
     frameBufferDurationMs: 5000
     opusEncodingQuality: 10
     resamplingQuality: LOW
@@ -46,14 +48,33 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
-    # ANDROID_MUSIC and IOS use mobile app endpoints that bypass
-    # YouTube's datacenter-IP "requires login" blocks on WEB/WEB_REMIX.
-    # MUSIC adds the YouTube Music web client for richer catalog coverage
-    # on lesser-known tracks and better artist/album metadata.
+    # ── Client selection rationale ────────────────────────────────────────
+    # MUSIC          – YouTube Music InnerTube client.  No Playback support;
+    #                  included solely for ytmsearch: metadata quality.
+    #                  Falls through to the next client for actual streaming.
+    # TVHTML5_SIMPLY – Embedded TV HTML5 player.  Has Opus, supports
+    #                  Playback + Livestream.  Most reliable from datacenter
+    #                  IPs because it's the same client used by embedded
+    #                  third-party YouTube players (low scrutiny from YT).
+    # MWEB           – Mobile web client.  Has Opus, Playback + Livestream.
+    #                  Mobile endpoints are less aggressively rate-limited
+    #                  from server IPs than the desktop WEB client.
+    # ANDROID_VR     – VR/Daydream Android client.  Has Opus, full Playback.
+    #                  Rarely targeted by YouTube's datacenter blocks.
+    # ANDROID_MUSIC  – Android YouTube Music client.  Has Opus, Playback.
+    #                  Kept as last-resort fallback; can return HTTP 400 or
+    #                  "This video requires login" from datacenter IPs under
+    #                  heavy load, but remains useful when others fail.
+    #
+    # Removed: IOS (no Opus → always transcodes → higher CPU + latency),
+    #          ANDROID (documented as "heavily restricted, frequently
+    #          dysfunctional" in the youtube-source README).
     clients:
-      - ANDROID_MUSIC
       - MUSIC
-      - IOS
+      - TVHTML5_SIMPLY
+      - MWEB
+      - ANDROID_VR
+      - ANDROID_MUSIC
 
 metrics:
   prometheus:
