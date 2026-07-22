@@ -48,8 +48,11 @@ plugins:
     allowDirectPlaylistIds: true
     # ANDROID_MUSIC and IOS use mobile app endpoints that bypass
     # YouTube's datacenter-IP "requires login" blocks on WEB/WEB_REMIX.
+    # MUSIC adds the YouTube Music web client for richer catalog coverage
+    # on lesser-known tracks and better artist/album metadata.
     clients:
       - ANDROID_MUSIC
+      - MUSIC
       - IOS
 
 metrics:

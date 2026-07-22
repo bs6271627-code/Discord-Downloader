@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import os
 import re
@@ -33,6 +34,15 @@ _SPOTIFY_RE = re.compile(
 # Any other http/https URL
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
+# Words that indicate a non-original upload (remix, cover, live, etc.).
+# Used by _best_match() to down-score results that weren't asked for.
+_JUNK_TAGS = re.compile(
+    r"\b(remix|cover|live|slowed|reverb|sped[ -]up|nightcore|mashup|"
+    r"acoustic|instrumental|karaoke|extended|bass[ -]boost(?:ed)?|"
+    r"lo[ -]?fi|lofi|edit|vip|flip|version)\b",
+    re.IGNORECASE,
+)
+
 _PLAY_COLOR = 0xD1ABED
 _MAX_PLAYLIST = 25  # max tracks queued from a YouTube playlist
 
@@ -44,6 +54,63 @@ _BROWSER_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+
+# ---------------------------------------------------------------------------
+# Track quality scoring
+# ---------------------------------------------------------------------------
+
+def _best_match(
+    query: str,
+    results: list[wavelink.Playable],
+    *,
+    min_duration_ms: int = 60_000,
+) -> wavelink.Playable | None:
+    """
+    Pick the most accurate result from a search list.
+
+    Scoring per candidate:
+      +3.0 × difflib title-similarity ratio (0–1 scale)
+      -1.5  per junk tag (remix/cover/live/slowed/reverb/…) found in the
+             result title but NOT in the original query
+      -3.0  if the track is shorter than min_duration_ms (likely a preview)
+      -0.05 × position (slight preference for higher-ranked results)
+
+    Falls back to results[0] on a tie so the search engine's own ranking
+    is the tiebreaker.
+    """
+    if not results:
+        return None
+
+    query_lower = query.lower()
+    query_junk: set[str] = {j.lower() for j in _JUNK_TAGS.findall(query_lower)}
+
+    best = results[0]
+    best_score = -999.0
+
+    for i, track in enumerate(results):
+        title_lower = track.title.lower()
+
+        # Title similarity
+        score = difflib.SequenceMatcher(None, query_lower, title_lower).ratio() * 3.0
+
+        # Penalise junk tags that appear in the result but weren't requested
+        result_junk: set[str] = {j.lower() for j in _JUNK_TAGS.findall(title_lower)}
+        unexpected_junk = result_junk - query_junk
+        score -= len(unexpected_junk) * 1.5
+
+        # Penalise very short tracks (previews / clips)
+        if track.length and track.length < min_duration_ms:
+            score -= 3.0
+
+        # Prefer results that rank higher (search engine signal)
+        score -= i * 0.05
+
+        if score > best_score:
+            best_score = score
+            best = track
+
+    return best
 
 # ---------------------------------------------------------------------------
 # Spotify Web API constants
@@ -250,12 +317,12 @@ async def _spotify_playlist_tracks_embed(
 
 
 async def _sc_search(query: str) -> wavelink.Playable | None:
-    """Search SoundCloud and return the best single result, or None."""
+    """Search SoundCloud and return the best-matched result, or None."""
     try:
         results: wavelink.Search = await wavelink.Playable.search(
             query, source=wavelink.TrackSource.SoundCloud
         )
-        return results[0] if results else None
+        return _best_match(query, list(results)[:5]) if results else None
     except Exception:
         return None
 
@@ -277,7 +344,7 @@ async def _sc_search_many(queries: list[str]) -> list[wavelink.Playable]:
 
 async def _ytm_search(query: str) -> wavelink.Playable | None:
     """
-    Search YouTube Music for the best single result.
+    Search YouTube Music for the best-matched result.
     Falls back to SoundCloud if YouTube Music returns nothing.
     """
     try:
@@ -285,7 +352,7 @@ async def _ytm_search(query: str) -> wavelink.Playable | None:
             query, source=wavelink.TrackSource.YouTubeMusic
         )
         if results:
-            return results[0]
+            return _best_match(query, list(results)[:5])
     except Exception:
         pass
     return await _sc_search(query)
@@ -382,6 +449,20 @@ class Music(commands.Cog):
         # A new track started — reset the queue-ended flag so a future empty
         # queue will produce a fresh notification rather than being silenced.
         player._queue_ended_sent = False  # type: ignore[attr-defined]
+
+        # Detailed playback log — essential for diagnosing wrong-version and
+        # mid-track-stop issues.
+        dur_s = track.length // 1000 if track.length else 0
+        print(
+            f"[track_start] title={track.title!r}"
+            f" | source={track.source}"
+            f" | duration={dur_s}s"
+            f" | stream={track.is_stream}"
+            f" | uri={track.uri!r}"
+            f" | guild={getattr(player.guild, 'id', '?')}",
+            flush=True,
+        )
+
         if channel is None:
             return
         await channel.send(embed=_now_playing_embed(track))
@@ -406,8 +487,19 @@ class Music(commands.Cog):
         • _queue_ended_sent flag deduplicates across reconnects or any event
           that fires multiple times for the same idle session.
         """
-        # Only act on natural track completion, not skips / stop / cleanup.
-        if payload.reason != "finished":
+        track: wavelink.Playable = payload.track
+        print(
+            f"[track_end] title={track.title!r}"
+            f" | reason={payload.reason!r}"
+            f" | guild={getattr(getattr(payload.player, 'guild', None), 'id', '?')}",
+            flush=True,
+        )
+
+        # Only fire the "Queue Ended" notification for natural completion or
+        # load failures — skips ("replaced") and manual stops ("stopped") are
+        # excluded.  "loadFailed" must be included so the notification fires
+        # when the last track in the queue fails to load.
+        if payload.reason not in ("finished", "loadFailed"):
             return
 
         player: wavelink.Player | None = payload.player
@@ -455,12 +547,48 @@ class Music(commands.Cog):
         self, payload: wavelink.TrackExceptionEventPayload
     ) -> None:
         player: wavelink.Player = payload.player
+        exc = payload.exception
+        print(
+            f"[track_exception] title={payload.track.title!r}"
+            f" | message={exc.get('message', '')!r}"
+            f" | cause={exc.get('cause', '')!r}"
+            f" | severity={exc.get('severity', '')!r}"
+            f" | guild={getattr(getattr(player, 'guild', None), 'id', '?')}",
+            flush=True,
+        )
         channel: discord.TextChannel | None = getattr(player, "home", None)
         if channel:
             await channel.send(
-                f"⚠️ Playback error for **{payload.track.title}**: "
-                f"{payload.exception.get('message', 'unknown error')}",
+                f"⚠️ Playback error for **{discord.utils.escape_markdown(payload.track.title)}**: "
+                f"{exc.get('message', 'unknown error')}",
             )
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_stuck(
+        self, payload: wavelink.TrackStuckEventPayload
+    ) -> None:
+        """
+        Handle Lavalink TrackStuckEvent — fires when no audio frames are
+        produced for trackStuckThresholdMs (configured as 10 000 ms).
+
+        Without this handler the bot sits silently frozen.  We log the event,
+        notify the channel, and force-skip to the next track.
+        """
+        player: wavelink.Player = payload.player
+        track: wavelink.Playable = payload.track
+        print(
+            f"[track_stuck] title={track.title!r}"
+            f" | threshold={payload.threshold}ms"
+            f" | guild={getattr(getattr(player, 'guild', None), 'id', '?')}",
+            flush=True,
+        )
+        channel: discord.TextChannel | None = getattr(player, "home", None)
+        if channel:
+            await channel.send(
+                f"⚠️ **{discord.utils.escape_markdown(track.title)}** got stuck "
+                f"(no audio for {payload.threshold // 1000}s) — skipping."
+            )
+        await player.skip(force=True)
 
     @commands.Cog.listener()
     async def on_wavelink_inactive_player(
@@ -644,23 +772,29 @@ class Music(commands.Cog):
                         )
                         return
 
-                    tracks = await _sc_search_many(titles)
-                    if not tracks:
+                    # Prefer YouTube Music (better artist/track data), fall back
+                    # to SoundCloud inside _ytm_search for anything YTM misses.
+                    yt_found, yt_skipped = await _ytm_search_many(titles)
+                    if not yt_found:
                         await ctx.send(
                             embed=_error_embed(
                                 "❌ No Matches Found",
-                                "Found the playlist on YouTube but couldn't match any tracks on SoundCloud.\n"
+                                "Found the playlist on YouTube but couldn't match any tracks.\n"
                                 "Try searching by song name instead.",
                             ),
                             ephemeral=True,
                         )
                         return
 
-                    for t in tracks:
+                    for t in yt_found:
                         player.queue.put(t)
+                    skipped_note = (
+                        f" ({yt_skipped} track{'s' if yt_skipped != 1 else ''} skipped)"
+                        if yt_skipped else ""
+                    )
                     msg = (
-                        f"➕ Queued **{len(tracks)}** track{'s' if len(tracks) != 1 else ''}  "
-                        f"from YouTube playlist (matched on SoundCloud)."
+                        f"➕ Queued **{len(yt_found)}** track{'s' if len(yt_found) != 1 else ''} "
+                        f"from YouTube playlist{skipped_note}."
                     )
 
                 else:
@@ -728,9 +862,12 @@ class Music(commands.Cog):
 
                 if sp_type == "track":
                     # ── Spotify single track ──────────────────────────────
-                    # Spotify's oEmbed only returns "title" (track name);
-                    # author_name is not included in their oEmbed spec.
-                    sp_title = (oembed.get("title") or "").strip()
+                    # oEmbed returns both "title" (track name) and
+                    # "author_name" (artist).  Include the artist so the
+                    # SoundCloud search can distinguish e.g. "Blinding Lights
+                    # The Weeknd" from a cover or remix.
+                    sp_title  = (oembed.get("title") or "").strip()
+                    sp_author = (oembed.get("author_name") or "").strip()
                     if not sp_title:
                         await ctx.send(
                             embed=_error_embed(
@@ -742,7 +879,9 @@ class Music(commands.Cog):
                         )
                         return
 
-                    track = await _sc_search(sp_title)
+                    # Build a richer query: "Track Title Artist"
+                    sp_search_q = f"{sp_title} {sp_author}".strip() if sp_author else sp_title
+                    track = await _sc_search(sp_search_q)
 
                     if track is None:
                         await ctx.send(
@@ -906,7 +1045,7 @@ class Music(commands.Cog):
                     )
                     return
 
-                track = results[0]
+                track = _best_match(query, list(results)[:5]) or results[0]
                 player.queue.put(track)
                 msg = self._queue_msg(track, player, is_loading=not player.playing)
 
